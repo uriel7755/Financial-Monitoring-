@@ -564,6 +564,17 @@
     renderViews();
     pullLedgerFromSheet();
 
+    // Keep devices in sync automatically: re-pull from the Sheet on an
+    // interval, and immediately whenever the tab/app regains focus.
+    const AUTO_PULL_MS = 8000;
+    setInterval(() => {
+      if (document.visibilityState === "visible") pullLedgerFromSheet();
+    }, AUTO_PULL_MS);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") pullLedgerFromSheet();
+    });
+    window.addEventListener("focus", () => pullLedgerFromSheet());
+
     function formatCurrency(num) {
       return '₱' + Number(num || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
@@ -766,7 +777,7 @@
     // ---------- Google Sheet sync (via Apps Script Web App JSON API) ----------
     // Paste your deployed Apps Script Web App URL below (Deploy > Manage deployments > Web app URL).
     // It must end in /exec. Leave as "" to run in local/offline-only mode.
-    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwQWJZzO-aJCCn0hQpjiPybE9S247hYT-ZSaaUXCq7GnvdoC7lDlV1jzS4AC8OyXclB/exec";
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxpXL9SbWq88JMkRaxQ6G9xG5xnSLFBiidBDo4wppyYReADJy9jbpN6LY_bvdVTb1HV/exec";
 
     function hasServerLink() {
       return typeof APPS_SCRIPT_URL === "string" && APPS_SCRIPT_URL.startsWith("http");
@@ -795,6 +806,7 @@
     }
 
     let pendingSync = false;
+    let isWriting = false; // true while a local change is being pushed to the Sheet
 
     async function syncToSheet() {
       if (!hasServerLink()) return; // no backend configured — local-only mode
@@ -803,6 +815,7 @@
         setSyncStatus("offline");
         return;
       }
+      isWriting = true;
       setSyncStatus("syncing");
       try {
         const res = await fetch(APPS_SCRIPT_URL, {
@@ -817,11 +830,20 @@
       } catch (err) {
         console.error("Sheet sync failed:", err);
         setSyncStatus("error");
+      } finally {
+        isWriting = false;
       }
     }
 
+    let isPulling = false;
+
+    // Pulls the latest ledger from the Sheet and adopts it as the source of
+    // truth for this device. Called on load, on an interval, and whenever
+    // the tab/app regains focus — this is what makes multi-device edits
+    // show up automatically instead of only on first install.
     async function pullLedgerFromSheet() {
-      if (!hasServerLink()) return;
+      if (!hasServerLink() || isPulling || isWriting) return;
+      isPulling = true;
       setSyncStatus("syncing");
       try {
         const res = await fetch(APPS_SCRIPT_URL, {
@@ -830,8 +852,6 @@
           body: JSON.stringify({ action: "getLedger" })
         });
         const data = await res.json();
-        // The Sheet is the shared source of truth across devices — always adopt
-        // its current contents rather than only doing this once when empty.
         if (data && Array.isArray(data.ledger)) {
           ledger = data.ledger;
           localStorage.setItem("ledger_data", JSON.stringify(ledger));
@@ -843,11 +863,16 @@
         // rather than wiping local data.
         console.error("Sheet pull failed:", err);
         setSyncStatus("error");
+      } finally {
+        isPulling = false;
       }
     }
 
     // Retry automatically once the device comes back online.
-    window.addEventListener("online", () => { if (pendingSync) syncToSheet(); });
+    window.addEventListener("online", () => {
+      if (pendingSync) syncToSheet();
+      pullLedgerFromSheet();
+    });
     window.addEventListener("offline", () => setSyncStatus("offline"));
 
     // ---------- PWA install support ----------
