@@ -1290,11 +1290,15 @@
 
     function toggleCheck(id) {
       const item = ledger.find(t => String(t.id) === String(id));
-      if (!item) return;
+      if (!item || item.isPaymentLog) return;
 
       item.checked = !item.checked;
 
       if (item.checked) {
+        // Prevent duplicate payment logs if the checkbox is clicked again
+        // after a sync/render.
+        ledger = ledger.filter(t => String(t.id) !== "pay_" + item.id);
+
         const currentDate = new Date().toISOString().split("T")[0];
         const paymentTxn = {
           id: "pay_" + item.id,
@@ -1309,10 +1313,15 @@
         };
         ledger.unshift(paymentTxn);
       } else {
-        ledger = ledger.filter(t => t.linkedLoanId !== item.id);
+        // Unchecking the installment also removes its payment log.
+        ledger = ledger.filter(t => String(t.linkedLoanId) !== String(item.id));
       }
 
-      saveLedger();
+      // Immediately refresh every view so the Credit Cards tab,
+      // available credit, and Recent Transactions stay synchronized.
+      localStorage.setItem("ledger_data", JSON.stringify(ledger));
+      renderViews();
+      syncToSheet();
     }
 
     function updateCreditLimit(cardName, value) {
@@ -1328,18 +1337,44 @@
 
       if (!confirm(`Are you sure you want to delete transaction "${target.particulars}" (${formatCurrency(target.amount)})?`)) return;
 
-      if (target.type === "Loan" && target.loanGroupId) {
-        const groupItems = ledger.filter(t => t.loanGroupId === target.loanGroupId);
-        const groupIds = groupItems.map(g => g.id);
-        ledger = ledger.filter(t => t.loanGroupId !== target.loanGroupId && !groupIds.includes(t.linkedLoanId));
+      // A loan is one logical transaction even though it is stored as
+      // multiple monthly installment rows. Deleting ANY installment
+      // therefore deletes the entire loan schedule and every payment log
+      // belonging to any installment in that schedule.
+      if (target.loanGroupId) {
+        const groupId = String(target.loanGroupId);
+
+        const installmentIds = ledger
+          .filter(t => String(t.loanGroupId) === groupId)
+          .map(t => String(t.id));
+
+        const installmentIdSet = new Set(installmentIds);
+
+        ledger = ledger.filter(t => {
+          const belongsToLoan = String(t.loanGroupId) === groupId;
+          const isPaymentForLoan = t.isPaymentLog &&
+            t.linkedLoanId != null &&
+            installmentIdSet.has(String(t.linkedLoanId));
+
+          return !belongsToLoan && !isPaymentForLoan;
+        });
+
       } else if (target.isPaymentLog && target.linkedLoanId) {
+        // If a payment log itself is deleted, only undo that installment's
+        // paid state; do not delete the rest of the loan.
         const loanItem = ledger.find(t => String(t.id) === String(target.linkedLoanId));
         if (loanItem) {
           loanItem.checked = false;
         }
+
         ledger = ledger.filter(t => String(t.id) !== String(id));
+
       } else {
-        ledger = ledger.filter(t => String(t.id) !== String(id) && t.linkedLoanId !== String(id));
+        // Normal transaction: delete itself and any direct payment log.
+        ledger = ledger.filter(t =>
+          String(t.id) !== String(id) &&
+          String(t.linkedLoanId || "") !== String(id)
+        );
       }
 
       saveLedger();
