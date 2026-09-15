@@ -85,9 +85,6 @@
         <span id="syncStatus" class="text-[10px] font-bold text-gray-400"></span>
       </div>
       <div class="flex items-center space-x-2">
-        <button onclick="pullLedgerFromSheet()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 p-2.5 rounded-lg flex items-center justify-center shadow-sm transition transform active:scale-95 cursor-pointer" title="Refresh from Sheet">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-        </button>
         <button onclick="promptInstall()" id="installBtn" class="hidden bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-2 rounded-lg shadow-md transition cursor-pointer" title="Install app">
           Install App
         </button>
@@ -562,18 +559,7 @@
 
     refreshAllDropdowns();
     renderViews();
-    pullLedgerFromSheet();
-
-    // Keep devices in sync automatically: re-pull from the Sheet on an
-    // interval, and immediately whenever the tab/app regains focus.
-    const AUTO_PULL_MS = 8000;
-    setInterval(() => {
-      if (document.visibilityState === "visible") pullLedgerFromSheet();
-    }, AUTO_PULL_MS);
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") pullLedgerFromSheet();
-    });
-    window.addEventListener("focus", () => pullLedgerFromSheet());
+    pullLedgerFromSheetIfEmpty();
 
     function formatCurrency(num) {
       return '₱' + Number(num || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -806,7 +792,6 @@
     }
 
     let pendingSync = false;
-    let isWriting = false; // true while a local change is being pushed to the Sheet
 
     async function syncToSheet() {
       if (!hasServerLink()) return; // no backend configured — local-only mode
@@ -815,7 +800,6 @@
         setSyncStatus("offline");
         return;
       }
-      isWriting = true;
       setSyncStatus("syncing");
       try {
         const res = await fetch(APPS_SCRIPT_URL, {
@@ -830,20 +814,11 @@
       } catch (err) {
         console.error("Sheet sync failed:", err);
         setSyncStatus("error");
-      } finally {
-        isWriting = false;
       }
     }
 
-    let isPulling = false;
-
-    // Pulls the latest ledger from the Sheet and adopts it as the source of
-    // truth for this device. Called on load, on an interval, and whenever
-    // the tab/app regains focus — this is what makes multi-device edits
-    // show up automatically instead of only on first install.
-    async function pullLedgerFromSheet() {
-      if (!hasServerLink() || isPulling || isWriting) return;
-      isPulling = true;
+    async function pullLedgerFromSheetIfEmpty() {
+      if (!hasServerLink() || ledger.length > 0) return;
       setSyncStatus("syncing");
       try {
         const res = await fetch(APPS_SCRIPT_URL, {
@@ -852,27 +827,20 @@
           body: JSON.stringify({ action: "getLedger" })
         });
         const data = await res.json();
-        if (data && Array.isArray(data.ledger)) {
+        if (data && Array.isArray(data.ledger) && data.ledger.length) {
           ledger = data.ledger;
           localStorage.setItem("ledger_data", JSON.stringify(ledger));
           renderViews();
         }
         setSyncStatus("synced");
       } catch (err) {
-        // Offline or unreachable — keep whatever is already on this device
-        // rather than wiping local data.
         console.error("Sheet pull failed:", err);
         setSyncStatus("error");
-      } finally {
-        isPulling = false;
       }
     }
 
     // Retry automatically once the device comes back online.
-    window.addEventListener("online", () => {
-      if (pendingSync) syncToSheet();
-      pullLedgerFromSheet();
-    });
+    window.addEventListener("online", () => { if (pendingSync) syncToSheet(); });
     window.addEventListener("offline", () => setSyncStatus("offline"));
 
     // ---------- PWA install support ----------
