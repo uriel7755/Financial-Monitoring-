@@ -60,11 +60,6 @@
       transform: translateY(0);
     }
   </style>
-
-  <!-- Firebase: cross-device background sync -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
 </head>
 <body class="bg-gray-100 text-gray-800 antialiased min-h-screen p-2 md:p-4 overflow-y-auto">
 
@@ -74,12 +69,7 @@
     <div class="flex justify-between items-center px-2">
       <h1 class="text-xl font-bold text-gray-800">Transaction Manager</h1>
       <div class="flex items-center space-x-2">
-        <div class="flex items-center gap-1.5">
-          <span id="syncStatus" class="hidden sm:inline-flex items-center px-2 py-1.5 rounded-lg bg-gray-100 text-gray-500 text-[10px] font-bold" title="Cloud sync status">LOCAL</span>
-          <button onclick="connectCloudSync()" id="syncBtn" class="bg-gray-700 hover:bg-gray-900 text-white px-2.5 py-2.5 rounded-lg flex items-center justify-center shadow-md transition transform active:scale-95 cursor-pointer text-xs font-bold" title="Connect Google account for cross-device sync">
-            ☁ SYNC
-          </button>
-          <button onclick="toggleManageModal()" class="bg-gray-800 hover:bg-black text-white p-2.5 rounded-lg flex items-center justify-center shadow-md transition transform active:scale-95 cursor-pointer" title="Manage Accounts & Credit Cards">
+        <button onclick="toggleManageModal()" class="bg-gray-800 hover:bg-black text-white p-2.5 rounded-lg flex items-center justify-center shadow-md transition transform active:scale-95 cursor-pointer" title="Manage Accounts & Credit Cards">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
         </button>
 
@@ -536,256 +526,6 @@
     let activeDragType = null;
     let activeDragIndex = null;
 
-
-    /* ============================================================
-       CLOUD SYNC ENGINE
-       - Firebase Authentication: Google account
-       - Firestore: one shared document per Google account
-       - localStorage remains the fast offline cache
-       - changes are pushed in the background and remote changes
-         are applied automatically on every open device
-       ============================================================ */
-
-    const FIREBASE_CONFIG = {
-      apiKey: "PASTE_YOUR_FIREBASE_API_KEY",
-      authDomain: "PASTE_YOUR_FIREBASE_PROJECT_ID.firebaseapp.com",
-      projectId: "PASTE_YOUR_FIREBASE_PROJECT_ID",
-      storageBucket: "PASTE_YOUR_FIREBASE_PROJECT_ID.firebasestorage.app",
-      messagingSenderId: "PASTE_YOUR_FIREBASE_MESSAGING_SENDER_ID",
-      appId: "PASTE_YOUR_FIREBASE_APP_ID"
-    };
-
-    const SYNC_KEYS = [
-      "accounts_list",
-      "credit_list",
-      "ledger_data",
-      "credit_limits",
-      "card_date_spans"
-    ];
-
-    const nativeSetLocalStorage = window.localStorage.setItem.bind(window.localStorage);
-    let cloudSyncReady = false;
-    let applyingRemoteState = false;
-    let cloudUnsubscribe = null;
-    let cloudWriteTimer = null;
-    let cloudRevision = 0;
-    const syncClientId = "client_" + Math.random().toString(36).slice(2) + "_" + Date.now();
-
-    function firebaseConfigIsReady() {
-      return FIREBASE_CONFIG.apiKey &&
-             !FIREBASE_CONFIG.apiKey.startsWith("PASTE_") &&
-             FIREBASE_CONFIG.projectId &&
-             !FIREBASE_CONFIG.projectId.startsWith("PASTE_");
-    }
-
-    function setSyncStatus(label, classes) {
-      const el = document.getElementById("syncStatus");
-      const btn = document.getElementById("syncBtn");
-      if (!el) return;
-      el.textContent = label;
-      el.className = "hidden sm:inline-flex items-center px-2 py-1.5 rounded-lg text-[10px] font-bold " + classes;
-      if (btn) btn.disabled = false;
-    }
-
-    function setLocalAndSync(key, value) {
-      nativeSetLocalStorage(key, value);
-      if (cloudSyncReady && !applyingRemoteState && SYNC_KEYS.includes(key)) {
-        queueCloudSync();
-      }
-    }
-
-    function getLocalCloudState() {
-      return {
-        accounts: ACCOUNTS,
-        creditCards: CREDIT_CARDS,
-        ledger: ledger,
-        creditLimits: creditLimits,
-        cardDateSpans: cardDateSpans
-      };
-    }
-
-    function queueCloudSync() {
-      if (!cloudSyncReady || applyingRemoteState) return;
-      clearTimeout(cloudWriteTimer);
-      cloudWriteTimer = setTimeout(pushStateToCloud, 500);
-    }
-
-    async function pushStateToCloud() {
-      if (!cloudSyncReady || applyingRemoteState || !window.cloudDocRef) return;
-
-      try {
-        cloudRevision++;
-        await window.cloudDocRef.set({
-          schemaVersion: 1,
-          clientId: syncClientId,
-          revision: cloudRevision,
-          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-          ...getLocalCloudState()
-        }, { merge: true });
-
-        setSyncStatus("SYNCED", "bg-emerald-100 text-emerald-700");
-      } catch (err) {
-        console.error("Cloud sync write failed:", err);
-        setSyncStatus("OFFLINE", "bg-amber-100 text-amber-700");
-      }
-    }
-
-    function applyCloudState(data) {
-      if (!data) return;
-
-      applyingRemoteState = true;
-      try {
-        if (Array.isArray(data.accounts)) {
-          ACCOUNTS = data.accounts;
-          nativeSetLocalStorage("accounts_list", JSON.stringify(ACCOUNTS));
-        }
-        if (Array.isArray(data.creditCards)) {
-          CREDIT_CARDS = data.creditCards;
-          nativeSetLocalStorage("credit_list", JSON.stringify(CREDIT_CARDS));
-        }
-        if (Array.isArray(data.ledger)) {
-          ledger = data.ledger;
-          nativeSetLocalStorage("ledger_data", JSON.stringify(ledger));
-        }
-        if (data.creditLimits && typeof data.creditLimits === "object") {
-          creditLimits = data.creditLimits;
-          nativeSetLocalStorage("credit_limits", JSON.stringify(creditLimits));
-        }
-        if (data.cardDateSpans && typeof data.cardDateSpans === "object") {
-          cardDateSpans = data.cardDateSpans;
-          nativeSetLocalStorage("card_date_spans", JSON.stringify(cardDateSpans));
-        }
-
-        refreshAllDropdowns();
-        renderViews();
-      } finally {
-        applyingRemoteState = false;
-      }
-    }
-
-    async function startCloudSync(user) {
-      if (!user) return;
-
-      const db = firebase.firestore();
-      window.cloudDocRef = db.collection("users").doc(user.uid).collection("appData").doc("transactionManager");
-
-      setSyncStatus("CONNECTING", "bg-blue-100 text-blue-700");
-
-      try {
-        const snapshot = await window.cloudDocRef.get();
-
-        if (!snapshot.exists) {
-          // First device becomes the initial cloud source.
-          cloudSyncReady = true;
-          await pushStateToCloud();
-        } else {
-          // Existing cloud data becomes the source of truth.
-          cloudSyncReady = true;
-          applyCloudState(snapshot.data());
-          setSyncStatus("SYNCED", "bg-emerald-100 text-emerald-700");
-        }
-
-        if (cloudUnsubscribe) cloudUnsubscribe();
-
-        cloudUnsubscribe = window.cloudDocRef.onSnapshot(
-          snap => {
-            if (!snap.exists) return;
-            const data = snap.data();
-
-            // Ignore our own snapshot. Other devices will have a different clientId.
-            if (data.clientId === syncClientId) {
-              setSyncStatus("SYNCED", "bg-emerald-100 text-emerald-700");
-              return;
-            }
-
-            applyCloudState(data);
-            setSyncStatus("UPDATED", "bg-blue-100 text-blue-700");
-          },
-          err => {
-            console.error("Cloud sync listener failed:", err);
-            setSyncStatus("OFFLINE", "bg-amber-100 text-amber-700");
-          }
-        );
-      } catch (err) {
-        console.error("Cloud sync initialization failed:", err);
-        cloudSyncReady = false;
-        setSyncStatus("ERROR", "bg-red-100 text-red-700");
-        alert("Cloud sync could not start. Check your Firebase setup and internet connection.");
-      }
-    }
-
-    async function connectCloudSync() {
-      if (!firebaseConfigIsReady()) {
-        alert(
-          "Firebase is not configured yet.\n\n" +
-          "Open this HTML file, find FIREBASE_CONFIG, and paste your Firebase Web App configuration there. " +
-          "Then upload the updated HTML to GitHub."
-        );
-        return;
-      }
-
-      const btn = document.getElementById("syncBtn");
-      if (btn) btn.disabled = true;
-      setSyncStatus("SIGNING IN", "bg-blue-100 text-blue-700");
-
-      try {
-        if (!firebase.apps.length) {
-          firebase.initializeApp(FIREBASE_CONFIG);
-        }
-
-        const provider = new firebase.auth.GoogleAuthProvider();
-        provider.setCustomParameters({ prompt: "select_account" });
-
-        // If already signed in, just start syncing.
-        const currentUser = firebase.auth().currentUser;
-        if (currentUser) {
-          await startCloudSync(currentUser);
-          return;
-        }
-
-        const result = await firebase.auth().signInWithPopup(provider);
-        await startCloudSync(result.user);
-      } catch (err) {
-        console.error("Google/Firebase sign-in failed:", err);
-        setSyncStatus("LOCAL", "bg-gray-100 text-gray-500");
-
-        if (err && err.code === "auth/popup-blocked") {
-          alert("Your browser blocked the Google sign-in popup. Please allow popups for your GitHub Pages site and press SYNC again.");
-        } else {
-          alert("Google sign-in failed: " + (err.message || err));
-        }
-      } finally {
-        if (btn) btn.disabled = false;
-      }
-    }
-
-    function initializeCloudSync() {
-      if (!firebaseConfigIsReady()) {
-        setSyncStatus("LOCAL", "bg-gray-100 text-gray-500");
-        return;
-      }
-
-      try {
-        firebase.initializeApp(FIREBASE_CONFIG);
-
-        firebase.auth().onAuthStateChanged(async user => {
-          if (user) {
-            await startCloudSync(user);
-          } else {
-            cloudSyncReady = false;
-            setSyncStatus("LOCAL", "bg-gray-100 text-gray-500");
-          }
-        });
-
-        // Try to use an already-authenticated Google session without opening a popup.
-        const existingUser = firebase.auth().currentUser;
-        if (existingUser) startCloudSync(existingUser);
-      } catch (err) {
-        console.error("Firebase initialization failed:", err);
-        setSyncStatus("ERROR", "bg-red-100 text-red-700");
-      }
-    }
-
     ledger = ledger.map((item, index) => {
       if (!item.id) item.id = (Date.now() + index).toString();
       return item;
@@ -800,8 +540,6 @@
 
     refreshAllDropdowns();
     renderViews();
-
-    initializeCloudSync();
 
     function formatCurrency(num) {
       return '₱' + Number(num || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -831,7 +569,7 @@
       list.splice(targetIndex, 0, draggedItem);
 
       activeDragIndex = targetIndex;
-      setLocalAndSync(type === 'account' ? "accounts_list" : "credit_list", JSON.stringify(list));
+      localStorage.setItem(type === 'account' ? "accounts_list" : "credit_list", JSON.stringify(list));
       refreshAllDropdowns();
       
       if (type === 'account') renderAccountsGrid();
@@ -883,11 +621,11 @@
       if (category === "account") {
         if (ACCOUNTS.some(a => a.name.toLowerCase() === name.toLowerCase())) return alert("Account name already exists.");
         ACCOUNTS.push({ name, color });
-        setLocalAndSync("accounts_list", JSON.stringify(ACCOUNTS));
+        localStorage.setItem("accounts_list", JSON.stringify(ACCOUNTS));
       } else {
         if (CREDIT_CARDS.some(c => c.name.toLowerCase() === name.toLowerCase())) return alert("Credit Card name already exists.");
         CREDIT_CARDS.push({ name, color, dueDay });
-        setLocalAndSync("credit_list", JSON.stringify(CREDIT_CARDS));
+        localStorage.setItem("credit_list", JSON.stringify(CREDIT_CARDS));
       }
 
       document.getElementById("newName").value = "";
@@ -902,7 +640,7 @@
       const card = CREDIT_CARDS.find(c => c.name === cardName);
       if (card) {
         card.dueDay = day;
-        setLocalAndSync("credit_list", JSON.stringify(CREDIT_CARDS));
+        localStorage.setItem("credit_list", JSON.stringify(CREDIT_CARDS));
         renderCreditGrid();
       }
     }
@@ -912,10 +650,10 @@
 
       if (type === 'account') {
         ACCOUNTS = ACCOUNTS.filter(a => a.name !== name);
-        setLocalAndSync("accounts_list", JSON.stringify(ACCOUNTS));
+        localStorage.setItem("accounts_list", JSON.stringify(ACCOUNTS));
       } else {
         CREDIT_CARDS = CREDIT_CARDS.filter(c => c.name !== name);
-        setLocalAndSync("credit_list", JSON.stringify(CREDIT_CARDS));
+        localStorage.setItem("credit_list", JSON.stringify(CREDIT_CARDS));
       }
 
       refreshAllDropdowns();
@@ -997,7 +735,7 @@
     }
 
     function saveLedger() {
-      setLocalAndSync("ledger_data", JSON.stringify(ledger));
+      localStorage.setItem("ledger_data", JSON.stringify(ledger));
       renderViews();
     }
 
@@ -1271,14 +1009,14 @@
     function updateCardSpan(cardName, field, value) {
       if (!cardDateSpans[cardName]) cardDateSpans[cardName] = { start: "", end: "" };
       cardDateSpans[cardName][field] = value;
-      setLocalAndSync("card_date_spans", JSON.stringify(cardDateSpans));
+      localStorage.setItem("card_date_spans", JSON.stringify(cardDateSpans));
       renderCreditGrid();
     }
 
     function clearCardSpan(cardName) {
       if (cardDateSpans[cardName]) {
         cardDateSpans[cardName] = { start: "", end: "" };
-        setLocalAndSync("card_date_spans", JSON.stringify(cardDateSpans));
+        localStorage.setItem("card_date_spans", JSON.stringify(cardDateSpans));
         renderCreditGrid();
       }
     }
@@ -1393,20 +1131,14 @@
 
     function toggleCheck(id) {
       const item = ledger.find(t => String(t.id) === String(id));
-      if (!item || item.type !== "Loan") return;
+      if (!item) return;
 
-      const wasChecked = !!item.checked;
-      item.checked = !wasChecked;
-
-      const paymentId = "pay_" + item.id;
+      item.checked = !item.checked;
 
       if (item.checked) {
-        // Prevent duplicate EXPENSE records if a device retries the click/sync.
-        ledger = ledger.filter(t => String(t.id) !== paymentId);
-
         const currentDate = new Date().toISOString().split("T")[0];
         const paymentTxn = {
-          id: paymentId,
+          id: "pay_" + item.id,
           linkedLoanId: item.id,
           isPaymentLog: true,
           date: currentDate,
@@ -1416,11 +1148,9 @@
           amount: Math.abs(item.amount),
           checked: true
         };
-
         ledger.unshift(paymentTxn);
       } else {
-        // Unchecking removes only the EXPENSE generated by this loan installment.
-        ledger = ledger.filter(t => String(t.linkedLoanId) !== String(item.id));
+        ledger = ledger.filter(t => t.linkedLoanId !== item.id);
       }
 
       saveLedger();
@@ -1429,7 +1159,7 @@
     function updateCreditLimit(cardName, value) {
       const cleanVal = String(value).replace(/[^0-9.-]+/g, "");
       creditLimits[cardName] = parseFloat(cleanVal) || 0;
-      setLocalAndSync("credit_limits", JSON.stringify(creditLimits));
+      localStorage.setItem("credit_limits", JSON.stringify(creditLimits));
       renderCreditGrid();
     }
 
@@ -1441,11 +1171,8 @@
 
       if (target.type === "Loan" && target.loanGroupId) {
         const groupItems = ledger.filter(t => t.loanGroupId === target.loanGroupId);
-        const groupIds = groupItems.map(g => String(g.id));
-        ledger = ledger.filter(t =>
-          t.loanGroupId !== target.loanGroupId &&
-          !groupIds.includes(String(t.linkedLoanId))
-        );
+        const groupIds = groupItems.map(g => g.id);
+        ledger = ledger.filter(t => t.loanGroupId !== target.loanGroupId && !groupIds.includes(t.linkedLoanId));
       } else if (target.isPaymentLog && target.linkedLoanId) {
         const loanItem = ledger.find(t => String(t.id) === String(target.linkedLoanId));
         if (loanItem) {
@@ -1510,24 +1237,6 @@
       item.account = account;
       item.particulars = particulars;
       item.amount = finalAmount;
-
-      // Keep the generated EXPENSE synchronized with the Loan installment.
-      if (item.type === "Loan" && item.checked) {
-        const paymentTxn = ledger.find(t => String(t.id) === "pay_" + item.id);
-        if (paymentTxn) {
-          paymentTxn.account = item.account;
-          paymentTxn.particulars = item.particulars;
-          paymentTxn.amount = Math.abs(item.amount);
-        }
-      } else if (item.isPaymentLog && item.linkedLoanId) {
-        const loanItem = ledger.find(t => String(t.id) === String(item.linkedLoanId));
-        if (loanItem) {
-          loanItem.checked = true;
-          loanItem.account = account;
-          loanItem.particulars = particulars;
-          loanItem.amount = -Math.abs(rawAmount);
-        }
-      }
 
       saveLedger();
       toggleEditModal();
