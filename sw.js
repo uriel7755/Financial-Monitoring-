@@ -1,4 +1,4 @@
-const CACHE_NAME = "txn-manager-v2";
+const CACHE_NAME = "txn-manager-v3";
 
 const APP_SHELL = [
   "./",
@@ -10,7 +10,7 @@ const APP_SHELL = [
 ];
 
 /* ================================
-   INSTALL
+   INSTALL - Caches App Shell
 ================================ */
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -18,14 +18,11 @@ self.addEventListener("install", (event) => {
       return cache.addAll(APP_SHELL);
     })
   );
-
-  // Activate the new service worker immediately
   self.skipWaiting();
 });
 
-
 /* ================================
-   ACTIVATE
+   ACTIVATE - Clean Old Caches
 ================================ */
 self.addEventListener("activate", (event) => {
   event.waitUntil(
@@ -37,53 +34,32 @@ self.addEventListener("activate", (event) => {
       );
     })
   );
-
-  // Take control of all open pages immediately
   self.clients.claim();
 });
 
-
 /* ================================
-   FETCH
+   FETCH - Network First with Fallback
 ================================ */
 self.addEventListener("fetch", (event) => {
   const request = event.request;
 
-  // Only handle GET requests
-  if (request.method !== "GET") {
-    return;
-  }
-
-  // Only handle requests from this same origin
-  if (!request.url.startsWith(self.location.origin)) {
+  if (request.method !== "GET" || !request.url.startsWith(self.location.origin)) {
     return;
   }
 
   event.respondWith(
-    caches.match(request).then((cachedResponse) => {
-
-      const networkResponse = fetch(request)
-        .then((response) => {
-
-          // Save a fresh successful response in cache
-          if (response && response.ok) {
-            const responseClone = response.clone();
-
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(request, responseClone);
-            });
-          }
-
-          return response;
-        })
-        .catch(() => {
-          // If offline, use cached version
-          return cachedResponse;
-        });
-
-      // Return cached version immediately if available.
-      // Otherwise wait for network.
-      return cachedResponse || networkResponse;
-    })
+    fetch(request)
+      .then((networkResponse) => {
+        if (networkResponse && networkResponse.ok) {
+          const responseClone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(request, responseClone);
+          });
+        }
+        return networkResponse;
+      })
+      .catch(() => {
+        return caches.match(request);
+      })
   );
 });
