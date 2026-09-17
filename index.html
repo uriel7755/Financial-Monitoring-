@@ -1651,7 +1651,7 @@
       let html = "";
       for (let i = 1; i <= months; i++) {
         const nextMonthDate = new Date(baseDate);
-        nextMonthDate.setMonth(nextMonthDate.getMonth() + i);
+        nextMonthDate.setMonth(nextMonthDate.getMonth() + (i - 1));
         const defaultDueStr = nextMonthDate.toISOString().split("T")[0];
 
         html += `
