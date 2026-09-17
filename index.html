@@ -1,1500 +1,209 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Transaction Manager</title>
-  <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#2563eb">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Transactions">
-  <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap" rel="stylesheet">
-  <style>
-    * {
-      font-family: 'Nunito', sans-serif !important;
-    }
-
-    input[type="number"]::-webkit-outer-spin-button,
-    input[type="number"]::-webkit-inner-spin-button {
-      -webkit-appearance: none;
-      margin: 0;
-    }
-    input[type="number"] {
-      -moz-appearance: textfield;
-    }
-
-    @keyframes mini-shake {
-      0% { transform: rotate(0deg) translateY(0); }
-      25% { transform: rotate(-0.8deg) translateY(-1px); }
-      50% { transform: rotate(0deg) translateY(0); }
-      75% { transform: rotate(0.8deg) translateY(1px); }
-      100% { transform: rotate(0deg) translateY(0); }
-    }
-
-    .animate-shake {
-      animation: mini-shake 0.15s infinite ease-in-out !important;
-    }
-
-    .grid > div {
-      transition: transform 0.25s cubic-bezier(0.2, 0, 0, 1), opacity 0.2s ease;
-    }
-
-    .dragging-card {
-      opacity: 0.25;
-      transform: scale(0.96);
-      border: 2px dashed #3b82f6 !important;
-    }
-
-    #formContainer {
-      max-height: 0;
-      opacity: 0;
-      overflow: hidden;
-      transition: max-height 0.4s ease-in-out, opacity 0.3s ease-in-out;
-    }
-    #formContainer.open {
-      max-height: 1000px;
-      opacity: 1;
-    }
-
-    .tab-panel {
-      display: none;
-      opacity: 0;
-      transform: translateY(6px);
-      transition: opacity 0.25s ease-in-out, transform 0.25s ease-in-out;
-    }
-    .tab-panel.active {
-      display: block;
-      opacity: 1;
-      transform: translateY(0);
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transaction Manager</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
-<body class="bg-gray-100 text-gray-800 antialiased min-h-screen p-2 md:p-4 overflow-y-auto">
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
 
-  <div class="w-full mx-auto space-y-4">
-    
-    <!-- Top Action Bar -->
-    <div class="flex justify-between items-center px-2">
-      <div class="flex items-center space-x-2">
-        <h1 class="text-xl font-bold text-gray-800">Transaction Manager</h1>
-        <span id="syncStatus" class="text-[10px] font-bold text-gray-400"></span>
-      </div>
-      <div class="flex items-center space-x-2">
-        <button onclick="pullLedgerFromSheet()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 p-2.5 rounded-lg flex items-center justify-center shadow-sm transition transform active:scale-95 cursor-pointer" title="Refresh from Sheet">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-        </button>
-        <button onclick="promptInstall()" id="installBtn" class="hidden bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-2 rounded-lg shadow-md transition cursor-pointer" title="Install app">
-          Install App
-        </button>
-        <button onclick="toggleManageModal()" class="bg-gray-800 hover:bg-black text-white p-2.5 rounded-lg flex items-center justify-center shadow-md transition transform active:scale-95 cursor-pointer" title="Manage Accounts & Credit Cards">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-        </button>
-
-        <button onclick="toggleForm()" id="toggleBtn" class="bg-blue-600 hover:bg-blue-700 text-white w-10 h-10 rounded-full flex items-center justify-center shadow-md transition-all duration-300 transform active:scale-95 cursor-pointer overflow-hidden" title="Add Transaction">
-          <span id="toggleIcon" class="inline-block text-xl font-bold leading-none select-none transition-transform duration-300 transform rotate-45">✕</span>
-        </button>
-      </div>
-    </div>
-
-    <!-- Collapsible Entry Form Container -->
-    <div id="formContainer" class="bg-white rounded-xl shadow-sm border border-gray-200 max-w-2xl mx-auto">
-      
-      <!-- Tab Bar Header -->
-      <div class="flex border-b border-gray-200 bg-gray-50">
-        <button onclick="switchTab('entry')" id="tab-entry" class="tab-btn flex-1 py-3 text-xs font-bold uppercase tracking-wider text-blue-600 border-b-2 border-blue-600 bg-white transition-all cursor-pointer">
-          Entry
-        </button>
-        <button onclick="switchTab('transfer')" id="tab-transfer" class="tab-btn flex-1 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 hover:text-gray-700 transition-all cursor-pointer">
-          Fund Transfer
-        </button>
-        <button onclick="switchTab('withdraw')" id="tab-withdraw" class="tab-btn flex-1 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 hover:text-gray-700 transition-all cursor-pointer">
-          Withdraw
-        </button>
-        <button onclick="switchTab('loan')" id="tab-loan" class="tab-btn flex-1 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 hover:text-gray-700 transition-all cursor-pointer">
-          Loan
-        </button>
-      </div>
-
-      <!-- Tab Content Panels -->
-      <div class="p-6">
-        
-        <!-- 1. ENTRY TAB -->
-        <div id="panel-entry" class="tab-panel active space-y-4">
-          <div>
-            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Date</label>
-            <input type="date" id="entryDate" class="w-full p-2.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-          </div>
-          <div>
-            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Account / Card</label>
-            <select id="entryAccount" class="w-full p-2.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 outline-none"></select>
-          </div>
-          <div>
-            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Amount</label>
-            <div class="relative">
-              <span class="absolute left-3 top-2.5 text-gray-400 font-medium">₱</span>
-              <input type="number" id="entryAmount" step="0.01" placeholder="0.00" class="w-full pl-8 pr-3 py-2.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-            </div>
-          </div>
-          <div>
-            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Particulars</label>
-            <input type="text" id="entryParticulars" placeholder="What's this for?" class="w-full p-2.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-          </div>
-          <div class="grid grid-cols-2 gap-3 pt-2">
-            <button onclick="submitEntry('income')" class="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-3 rounded-lg text-sm tracking-wider uppercase transition cursor-pointer">
-              Income
+    <!-- Header -->
+    <header class="bg-indigo-600 text-white shadow-md">
+        <div class="max-w-4xl mx-auto px-4 py-4 flex justify-between items-center">
+            <h1 class="text-xl font-bold flex items-center gap-2">
+                <i class="fa-solid fa-wallet"></i> Transaction Manager
+            </h1>
+            <button onclick="clearAllTransactions()" class="text-xs bg-indigo-700 hover:bg-indigo-800 px-3 py-1.5 rounded transition text-indigo-100">
+                <i class="fa-solid fa-trash-can mr-1"></i> Clear Data
             </button>
-            <button onclick="submitEntry('expense')" class="w-full bg-red-700 hover:bg-red-800 text-white font-bold py-3 rounded-lg text-sm tracking-wider uppercase transition cursor-pointer">
-              Expense
-            </button>
-          </div>
         </div>
+    </header>
 
-        <!-- 2. FUND TRANSFER TAB -->
-        <div id="panel-transfer" class="tab-panel space-y-4">
-          <div>
-            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Date</label>
-            <input type="date" id="transferDate" class="w-full p-2.5 border border-gray-300 rounded-md text-sm outline-none">
-          </div>
-          <div>
-            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">From Account</label>
-            <select id="transferFrom" class="w-full p-2.5 border border-gray-300 rounded-md text-sm outline-none"></select>
-          </div>
-          <div>
-            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">To Account</label>
-            <select id="transferTo" class="w-full p-2.5 border border-gray-300 rounded-md text-sm outline-none"></select>
-          </div>
-          <div>
-            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Amount</label>
-            <div class="relative">
-              <span class="absolute left-3 top-2.5 text-gray-400 font-medium">₱</span>
-              <input type="number" id="transferAmount" step="0.01" placeholder="0.00" class="w-full pl-8 pr-3 py-2.5 border border-gray-300 rounded-md text-sm outline-none">
-            </div>
-          </div>
-          <button onclick="submitTransfer()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg text-sm tracking-wider uppercase transition mt-2 cursor-pointer">
-            Confirm Transfer
-          </button>
-        </div>
+    <!-- Main Container -->
+    <main class="max-w-4xl w-full mx-auto px-4 py-6 flex-grow grid grid-cols-1 md:grid-cols-3 gap-6">
 
-        <!-- 3. WITHDRAW TAB -->
-        <div id="panel-withdraw" class="tab-panel space-y-4">
-          <div>
-            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Date</label>
-            <input type="date" id="withdrawDate" class="w-full p-2.5 border border-gray-300 rounded-md text-sm outline-none">
-          </div>
-          <div>
-            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Withdraw From</label>
-            <select id="withdrawFrom" class="w-full p-2.5 border border-gray-300 rounded-md text-sm outline-none"></select>
-          </div>
-          <div>
-            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Amount</label>
-            <div class="relative">
-              <span class="absolute left-3 top-2.5 text-gray-400 font-medium">₱</span>
-              <input type="number" id="withdrawAmount" step="0.01" placeholder="0.00" class="w-full pl-8 pr-3 py-2.5 border border-gray-300 rounded-md text-sm outline-none">
-            </div>
-          </div>
-          <button onclick="submitWithdraw()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg text-sm tracking-wider uppercase transition mt-2 cursor-pointer">
-            Confirm Withdrawal
-          </button>
-        </div>
-
-        <!-- 4. LOAN TAB -->
-        <div id="panel-loan" class="tab-panel space-y-4">
-          <div>
-            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Purchase Date</label>
-            <input type="date" id="loanDate" class="w-full p-2.5 border border-gray-300 rounded-md text-sm outline-none">
-          </div>
-          <div>
-            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Card / Method</label>
-            <select id="loanCard" class="w-full p-2.5 border border-gray-300 rounded-md text-sm outline-none"></select>
-          </div>
-          <div>
-            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Particulars</label>
-            <input type="text" id="loanParticulars" placeholder="Item description" class="w-full p-2.5 border border-gray-300 rounded-md text-sm outline-none">
-          </div>
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Total Amount</label>
-              <input type="number" id="loanTotal" oninput="generateSchedule()" step="0.01" placeholder="0.00" class="w-full p-2.5 border border-gray-300 rounded-md text-sm outline-none">
-            </div>
-            <div>
-              <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Months</label>
-              <input type="number" id="loanMonths" value="3" min="1" max="60" oninput="generateSchedule()" class="w-full p-2.5 border border-gray-300 rounded-md text-sm outline-none">
-            </div>
-          </div>
-          <div id="scheduleBox" class="max-h-36 overflow-y-auto border border-gray-200 p-3 rounded-md bg-gray-50 space-y-2 hidden"></div>
-          <button onclick="submitLoan()" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-lg text-sm tracking-wider uppercase transition mt-2 cursor-pointer">
-            Submit Loan
-          </button>
-        </div>
-
-      </div>
-    </div>
-
-    <!-- MANAGE MODAL -->
-    <div id="manageModal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-      <div class="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-lg p-5 space-y-4 relative">
-        <div class="flex justify-between items-center border-b border-gray-200 pb-3">
-          <h2 class="text-base font-bold text-gray-800">Manage Accounts & Credit Cards</h2>
-          <button onclick="toggleManageModal()" class="text-gray-400 hover:text-gray-700 font-bold text-lg px-2 cursor-pointer">✕</button>
-        </div>
-
-        <div class="bg-gray-50 p-3.5 rounded-lg border border-gray-200 space-y-3">
-          <span class="block text-xs font-bold text-gray-700 uppercase">Add New Item</span>
-          <div class="grid grid-cols-1 sm:grid-cols-4 gap-2">
-            <select id="newCategory" class="p-2 border border-gray-300 rounded text-xs outline-none bg-white" onchange="toggleDueDateField(this.value)">
-              <option value="account">Account</option>
-              <option value="credit">Credit Card</option>
-            </select>
-            <input type="text" id="newName" placeholder="Name (e.g. GCash)" class="p-2 border border-gray-300 rounded text-xs outline-none bg-white">
-            <select id="newColor" class="p-2 border border-gray-300 rounded text-xs outline-none bg-white">
-              <option value="bg-blue-600">Blue</option>
-              <option value="bg-emerald-600">Emerald</option>
-              <option value="bg-green-500">Green</option>
-              <option value="bg-orange-500">Orange</option>
-              <option value="bg-purple-700">Purple</option>
-              <option value="bg-pink-600">Pink</option>
-              <option value="bg-red-500">Red</option>
-              <option value="bg-cyan-600">Cyan</option>
-              <option value="bg-indigo-500">Indigo</option>
-            </select>
-            <input type="number" id="newDueDate" min="1" max="31" placeholder="Due Nth (1-31)" class="hidden p-2 border border-gray-300 rounded text-xs outline-none bg-white">
-          </div>
-          <button onclick="addNewAccountOrCard()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded text-xs tracking-wider uppercase transition cursor-pointer">
-            + Add Item
-          </button>
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-          <div>
-            <span class="block font-bold text-gray-500 uppercase mb-2">Accounts</span>
-            <div id="manageAccountsList" class="space-y-1.5 max-h-48 overflow-y-auto pr-1"></div>
-          </div>
-          <div>
-            <span class="block font-bold text-gray-500 uppercase mb-2">Credit Cards (Due Nth)</span>
-            <div id="manageCreditList" class="space-y-1.5 max-h-48 overflow-y-auto pr-1"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- EDIT TRANSACTION MODAL -->
-    <div id="editModal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-      <div class="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md p-5 space-y-4 relative">
-        <div class="flex justify-between items-center border-b border-gray-200 pb-3">
-          <h2 class="text-base font-bold text-gray-800">Edit Transaction</h2>
-          <button onclick="toggleEditModal()" class="text-gray-400 hover:text-gray-700 font-bold text-lg px-2 cursor-pointer">✕</button>
-        </div>
-
-        <input type="hidden" id="editId">
-
-        <div class="space-y-3 text-xs">
-          <div>
-            <label class="block font-bold text-gray-500 uppercase mb-1">Date</label>
-            <input type="date" id="editDate" class="w-full p-2.5 border border-gray-300 rounded-md outline-none bg-white">
-          </div>
-          <div>
-            <label class="block font-bold text-gray-500 uppercase mb-1">Type</label>
-            <select id="editType" class="w-full p-2.5 border border-gray-300 rounded-md outline-none bg-white">
-              <option value="INCOME">INCOME</option>
-              <option value="EXPENSE">EXPENSE</option>
-              <option value="Fund Transfer">Fund Transfer</option>
-              <option value="Withdraw">Withdraw</option>
-              <option value="Loan">Loan</option>
-            </select>
-          </div>
-          <div>
-            <label class="block font-bold text-gray-500 uppercase mb-1">Account / Card</label>
-            <select id="editAccount" class="w-full p-2.5 border border-gray-300 rounded-md outline-none bg-white"></select>
-          </div>
-          <div>
-            <label class="block font-bold text-gray-500 uppercase mb-1">Particulars</label>
-            <input type="text" id="editParticulars" class="w-full p-2.5 border border-gray-300 rounded-md outline-none bg-white">
-          </div>
-          <div>
-            <label class="block font-bold text-gray-500 uppercase mb-1">Amount</label>
-            <div class="relative">
-              <span class="absolute left-3 top-2.5 text-gray-400 font-medium">₱</span>
-              <input type="number" id="editAmount" step="0.01" class="w-full pl-8 pr-3 py-2.5 border border-gray-300 rounded-md outline-none bg-white">
-            </div>
-          </div>
-        </div>
-
-        <button onclick="saveEditedTransaction()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded text-xs tracking-wider uppercase transition cursor-pointer">
-          Save Changes
-        </button>
-      </div>
-    </div>
-
-    <!-- Main Display Section -->
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-      <!-- Header Tabs -->
-      <div class="border-b border-gray-200 bg-gray-50 flex items-center px-4 pt-3 space-x-2 overflow-x-auto">
-        <button onclick="switchView('recent')" id="viewBtn-recent" class="view-btn px-4 py-2 text-xs font-bold uppercase tracking-wider text-blue-600 border-b-2 border-blue-600 bg-white rounded-t-md cursor-pointer whitespace-nowrap">
-          Recent Transactions
-        </button>
-        <button onclick="switchView('accounts')" id="viewBtn-accounts" class="view-btn px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 hover:text-gray-700 rounded-t-md cursor-pointer whitespace-nowrap">
-          Accounts
-        </button>
-        <button onclick="switchView('credit')" id="viewBtn-credit" class="view-btn px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 hover:text-gray-700 rounded-t-md cursor-pointer whitespace-nowrap">
-          Credit Cards
-        </button>
-        <button onclick="switchView('monthly')" id="viewBtn-monthly" class="view-btn px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 hover:text-gray-700 rounded-t-md cursor-pointer whitespace-nowrap">
-          Monthly Overview
-        </button>
-      </div>
-
-      <!-- VIEW 1: Recent Transactions Table -->
-      <div id="viewContainer-recent" class="p-4 space-y-3">
-        <div class="relative">
-          <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">🔍</span>
-          <input type="text" id="ledgerSearch" oninput="renderLedger()" placeholder="Search transactions by date, particulars, type, or account..." class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition">
-        </div>
-
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-sm text-gray-600">
-            <thead class="bg-gray-50 text-xs font-bold uppercase text-gray-500 border-b border-gray-200">
-              <tr>
-                <th class="p-3">Date</th>
-                <th class="p-3">Type</th>
-                <th class="p-3">Account / Card</th>
-                <th class="p-3">Particulars</th>
-                <th class="p-3 text-right">Amount</th>
-                <th class="p-3 text-center w-20">Actions</th>
-              </tr>
-            </thead>
-            <tbody id="ledgerTable" class="divide-y divide-gray-100"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- VIEW 2: Accounts Layout -->
-      <div id="viewContainer-accounts" class="hidden p-3">
-        <div id="accountsGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 text-[11px]"></div>
-      </div>
-
-      <!-- VIEW 3: Credit Cards Layout -->
-      <div id="viewContainer-credit" class="hidden p-3">
-        <div id="creditGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 text-[11px]"></div>
-      </div>
-
-      <!-- VIEW 4: Monthly Overview Layout -->
-      <div id="viewContainer-monthly" class="hidden p-4 space-y-4">
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-center bg-gray-50 p-4 rounded-xl border border-gray-200">
-          <div class="text-center md:text-left">
-            <h2 id="monthlyTitle" class="text-xl font-black text-gray-800 uppercase tracking-wide">September</h2>
-          </div>
-          <div class="flex items-center space-x-2 justify-center">
-            <div>
-              <label class="block text-[10px] font-bold text-gray-400 uppercase">Month</label>
-              <select id="monthlySelectMonth" onchange="renderMonthlyOverview()" class="p-2 border border-gray-300 rounded text-xs font-bold bg-white outline-none">
-                <option value="0">January</option>
-                <option value="1">February</option>
-                <option value="2">March</option>
-                <option value="3">April</option>
-                <option value="4">May</option>
-                <option value="5">June</option>
-                <option value="6">July</option>
-                <option value="7">August</option>
-                <option value="8" selected>September</option>
-                <option value="9">October</option>
-                <option value="10">November</option>
-                <option value="11">December</option>
-              </select>
-            </div>
-            <div>
-              <label class="block text-[10px] font-bold text-gray-400 uppercase">Year</label>
-              <select id="monthlySelectYear" onchange="renderMonthlyOverview()" class="p-2 border border-gray-300 rounded text-xs font-bold bg-white outline-none">
-                <option value="2025">2025</option>
-                <option value="2026" selected>2026</option>
-                <option value="2027">2027</option>
-                <option value="2028">2028</option>
-              </select>
-            </div>
-          </div>
-          <div class="md:col-span-2 grid grid-cols-3 gap-2 text-center">
-            <div class="bg-emerald-50 border border-emerald-200 p-2 rounded-lg">
-              <span class="block text-[9px] font-bold text-emerald-700 uppercase">Income</span>
-              <span id="monthlyTotalIncome" class="font-mono font-bold text-xs text-emerald-800">₱0.00</span>
-            </div>
-            <div class="bg-red-50 border border-red-200 p-2 rounded-lg">
-              <span class="block text-[9px] font-bold text-red-700 uppercase">Expense</span>
-              <span id="monthlyTotalExpense" class="font-mono font-bold text-xs text-red-800">₱0.00</span>
-            </div>
-            <div class="bg-blue-50 border border-blue-200 p-2 rounded-lg">
-              <span class="block text-[9px] font-bold text-blue-700 uppercase">Balance</span>
-              <span id="monthlyTotalBalance" class="font-mono font-bold text-xs text-blue-800">₱0.00</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div class="bg-white border border-gray-200 rounded-xl p-3 flex flex-col items-center shadow-sm">
-            <div class="w-full bg-emerald-100 text-emerald-800 text-center font-bold text-xs py-1 rounded mb-2 uppercase tracking-wide">Income Share</div>
-            <div class="relative w-36 h-36 flex items-center justify-center">
-              <svg class="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-                <path class="text-gray-100" stroke-width="4" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                <path id="incomeDonutPath" class="text-emerald-500 transition-all duration-500" stroke-dasharray="0, 100" stroke-width="4" stroke-dashoffset="25" stroke-linecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-              </svg>
-              <div class="absolute text-center">
-                <span id="incomeDonutText" class="text-xs font-mono font-bold text-gray-700">100%</span>
-              </div>
-            </div>
-            <div id="incomeLegend" class="w-full mt-2 text-[11px] space-y-1 max-h-24 overflow-y-auto"></div>
-          </div>
-
-          <div class="bg-white border border-gray-200 rounded-xl p-3 flex flex-col items-center shadow-sm">
-            <div class="w-full bg-red-100 text-red-800 text-center font-bold text-xs py-1 rounded mb-2 uppercase tracking-wide">Expense Share</div>
-            <div class="relative w-36 h-36 flex items-center justify-center">
-              <svg class="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-                <path class="text-gray-100" stroke-width="4" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                <path id="expenseDonutPath" class="text-red-500 transition-all duration-500" stroke-dasharray="0, 100" stroke-width="4" stroke-dashoffset="25" stroke-linecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-              </svg>
-              <div class="absolute text-center">
-                <span id="expenseDonutText" class="text-xs font-mono font-bold text-gray-700">100%</span>
-              </div>
-            </div>
-            <div id="expenseLegend" class="w-full mt-2 text-[11px] space-y-1 max-h-24 overflow-y-auto"></div>
-          </div>
-
-          <div class="bg-white border border-gray-200 rounded-xl p-3 flex flex-col items-center shadow-sm">
-            <div class="w-full bg-blue-100 text-blue-800 text-center font-bold text-xs py-1 rounded mb-3 uppercase tracking-wide">Cash Flow</div>
-            <div class="w-full h-36 flex items-end justify-around px-6 border-b border-gray-200 pb-1 relative">
-              <div class="absolute inset-x-0 top-0 border-t border-gray-100"></div>
-              <div class="absolute inset-x-0 top-1/2 border-t border-gray-100"></div>
-              
-              <div class="flex flex-col items-center h-full justify-end z-10">
-                <span id="barIncomeVal" class="text-[9px] font-mono font-bold text-emerald-700 mb-1">₱0</span>
-                <div id="barIncome" class="w-10 bg-emerald-600 rounded-t transition-all duration-500" style="height: 0px;"></div>
-                <span class="text-[10px] font-bold text-gray-500 mt-1 uppercase">Income</span>
-              </div>
-
-              <div class="flex flex-col items-center h-full justify-end z-10">
-                <span id="barExpenseVal" class="text-[9px] font-mono font-bold text-red-700 mb-1">₱0</span>
-                <div id="barExpense" class="w-10 bg-red-600 rounded-t transition-all duration-500" style="height: 0px;"></div>
-                <span class="text-[10px] font-bold text-gray-500 mt-1 uppercase">Expense</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div class="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-            <div class="bg-emerald-700 text-white px-3 py-2 text-xs font-bold uppercase tracking-wider text-center">Income</div>
-            <table class="w-full text-left text-xs">
-              <thead class="bg-gray-50 text-gray-500 border-b border-gray-200">
-                <tr>
-                  <th class="p-2.5">Particulars</th>
-                  <th class="p-2.5 text-right">Amount</th>
-                </tr>
-              </thead>
-              <tbody id="monthlyIncomeTableBody" class="divide-y divide-gray-100">
-                <tr><td colspan="2" class="p-4 text-center text-gray-400">No income records</td></tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div class="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-            <div class="bg-red-700 text-white px-3 py-2 text-xs font-bold uppercase tracking-wider text-center">Expense</div>
-            <table class="w-full text-left text-xs">
-              <thead class="bg-gray-50 text-gray-500 border-b border-gray-200">
-                <tr>
-                  <th class="p-2.5">Particulars</th>
-                  <th class="p-2.5 text-right">Amount</th>
-                </tr>
-              </thead>
-              <tbody id="monthlyExpenseTableBody" class="divide-y divide-gray-100">
-                <tr><td colspan="2" class="p-4 text-center text-gray-400">No expense records</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-    </div>
-  </div>
-
-  <script>
-    const DEFAULT_ACCOUNTS = [
-      { name: "CASH", color: "bg-blue-600" },
-      { name: "CJ LBP", color: "bg-emerald-600" },
-      { name: "UR LBP", color: "bg-green-500" },
-      { name: "CJ BDO", color: "bg-blue-500" },
-      { name: "UR BDO", color: "bg-indigo-500" },
-      { name: "Go Tyme", color: "bg-cyan-600" },
-      { name: "MARIBANK", color: "bg-orange-500" }
-    ];
-
-    const DEFAULT_CREDIT_CARDS = [
-      { name: "BDO (AMEX)", color: "bg-blue-600", dueDay: 15 },
-      { name: "UB", color: "bg-orange-600", dueDay: 20 },
-      { name: "METROBANK", color: "bg-blue-800", dueDay: 25 },
-      { name: "BDO (INSTALLMENT)", color: "bg-sky-600", dueDay: 15 },
-      { name: "ATOME", color: "bg-pink-600", dueDay: 10 },
-      { name: "SHOPEE", color: "bg-red-500", dueDay: 30 },
-      { name: "CASH LOAN", color: "bg-purple-700", dueDay: 28 }
-    ];
-
-    let ACCOUNTS = JSON.parse(localStorage.getItem("accounts_list")) || DEFAULT_ACCOUNTS;
-    let CREDIT_CARDS = JSON.parse(localStorage.getItem("credit_list")) || DEFAULT_CREDIT_CARDS;
-    let ledger = JSON.parse(localStorage.getItem("ledger_data")) || [];
-    let creditLimits = JSON.parse(localStorage.getItem("credit_limits")) || {};
-    let cardDateSpans = JSON.parse(localStorage.getItem("card_date_spans")) || {};
-
-    let activeDragType = null;
-    let activeDragIndex = null;
-
-    ledger = ledger.map((item, index) => {
-      if (!item.id) item.id = (Date.now() + index).toString();
-      return item;
-    });
-
-    const todayObj = new Date();
-    const today = todayObj.toISOString().split("T")[0];
-    document.querySelectorAll('input[type="date"]').forEach(el => el.value = today);
-
-    document.getElementById("monthlySelectMonth").value = todayObj.getMonth();
-    document.getElementById("monthlySelectYear").value = todayObj.getFullYear();
-
-    refreshAllDropdowns();
-    renderViews();
-    pullLedgerFromSheet();
-
-    function formatCurrency(num) {
-      return '₱' + Number(num || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    }
-
-    function handleDragStart(e, type, index) {
-      activeDragType = type;
-      activeDragIndex = index;
-      e.dataTransfer.effectAllowed = "move";
-      setTimeout(() => {
-        if (type === 'account') renderAccountsGrid();
-        else renderCreditGrid();
-      }, 0);
-    }
-
-    function handleDragOver(e) {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "move";
-    }
-
-    function handleDragEnter(e, type, targetIndex) {
-      e.preventDefault();
-      if (activeDragType !== type || activeDragIndex === null || activeDragIndex === targetIndex) return;
-
-      const list = type === 'account' ? ACCOUNTS : CREDIT_CARDS;
-      const [draggedItem] = list.splice(activeDragIndex, 1);
-      list.splice(targetIndex, 0, draggedItem);
-
-      activeDragIndex = targetIndex;
-      localStorage.setItem(type === 'account' ? "accounts_list" : "credit_list", JSON.stringify(list));
-      refreshAllDropdowns();
-      
-      if (type === 'account') renderAccountsGrid();
-      else renderCreditGrid();
-    }
-
-    function handleDragEnd() {
-      activeDragType = null;
-      activeDragIndex = null;
-      renderViews();
-    }
-
-    function toggleManageModal() {
-      document.getElementById("manageModal").classList.toggle("hidden");
-    }
-
-    function toggleDueDateField(val) {
-      const dueDateInput = document.getElementById("newDueDate");
-      if (val === 'credit') {
-        dueDateInput.classList.remove("hidden");
-      } else {
-        dueDateInput.classList.add("hidden");
-      }
-    }
-
-    function refreshAllDropdowns() {
-      const allMethods = [...ACCOUNTS.map(a => a.name), ...CREDIT_CARDS.map(c => c.name)];
-      populateDropdown("entryAccount", allMethods);
-      populateDropdown("transferFrom", allMethods);
-      populateDropdown("transferTo", allMethods);
-      populateDropdown("withdrawFrom", ACCOUNTS.map(a => a.name));
-      populateDropdown("loanCard", CREDIT_CARDS.map(c => c.name));
-      renderManageLists();
-    }
-
-    function populateDropdown(id, items) {
-      const el = document.getElementById(id);
-      if (el) el.innerHTML = items.map(acc => `<option value="${acc}">${acc}</option>`).join("");
-    }
-
-    function addNewAccountOrCard() {
-      const category = document.getElementById("newCategory").value;
-      const name = document.getElementById("newName").value.trim();
-      const color = document.getElementById("newColor").value;
-      const dueDay = parseInt(document.getElementById("newDueDate").value) || 15;
-
-      if (!name) return alert("Please enter a name.");
-
-      if (category === "account") {
-        if (ACCOUNTS.some(a => a.name.toLowerCase() === name.toLowerCase())) return alert("Account name already exists.");
-        ACCOUNTS.push({ name, color });
-        localStorage.setItem("accounts_list", JSON.stringify(ACCOUNTS));
-      } else {
-        if (CREDIT_CARDS.some(c => c.name.toLowerCase() === name.toLowerCase())) return alert("Credit Card name already exists.");
-        CREDIT_CARDS.push({ name, color, dueDay });
-        localStorage.setItem("credit_list", JSON.stringify(CREDIT_CARDS));
-      }
-
-      document.getElementById("newName").value = "";
-      document.getElementById("newDueDate").value = "";
-      refreshAllDropdowns();
-      renderViews();
-    }
-
-    function updateCardDueDay(cardName, newDayVal) {
-      const day = parseInt(newDayVal);
-      if (isNaN(day) || day < 1 || day > 31) return;
-      const card = CREDIT_CARDS.find(c => c.name === cardName);
-      if (card) {
-        card.dueDay = day;
-        localStorage.setItem("credit_list", JSON.stringify(CREDIT_CARDS));
-        renderCreditGrid();
-      }
-    }
-
-    function deleteAccountOrCard(type, name) {
-      if (!confirm(`Are you sure you want to remove "${name}"?`)) return;
-
-      if (type === 'account') {
-        ACCOUNTS = ACCOUNTS.filter(a => a.name !== name);
-        localStorage.setItem("accounts_list", JSON.stringify(ACCOUNTS));
-      } else {
-        CREDIT_CARDS = CREDIT_CARDS.filter(c => c.name !== name);
-        localStorage.setItem("credit_list", JSON.stringify(CREDIT_CARDS));
-      }
-
-      refreshAllDropdowns();
-      renderViews();
-    }
-
-    function renderManageLists() {
-      const accContainer = document.getElementById("manageAccountsList");
-      const credContainer = document.getElementById("manageCreditList");
-
-      accContainer.innerHTML = ACCOUNTS.map(a => `
-        <div class="flex justify-between items-center p-2 bg-gray-50 border border-gray-200 rounded">
-          <span class="font-bold text-gray-700">${a.name}</span>
-          <button onclick="deleteAccountOrCard('account', '${a.name}')" class="text-gray-400 hover:text-red-600 font-bold px-1 transition cursor-pointer">✕</button>
-        </div>
-      `).join("");
-
-      credContainer.innerHTML = CREDIT_CARDS.map(c => `
-        <div class="flex justify-between items-center p-2 bg-gray-50 border border-gray-200 rounded space-x-2">
-          <span class="font-bold text-gray-700 truncate">${c.name}</span>
-          <div class="flex items-center space-x-1 shrink-0">
-            <span class="text-[10px] text-gray-400 uppercase">Due:</span>
-            <input type="number" min="1" max="31" value="${c.dueDay || 15}" onchange="updateCardDueDay('${c.name}', this.value)" class="w-12 p-0.5 border border-gray-300 rounded text-center text-xs font-mono outline-none bg-white">
-            <button onclick="deleteAccountOrCard('credit', '${c.name}')" class="text-gray-400 hover:text-red-600 font-bold px-1 transition cursor-pointer">✕</button>
-          </div>
-        </div>
-      `).join("");
-    }
-
-    function toggleForm() {
-      const container = document.getElementById("formContainer");
-      const btn = document.getElementById("toggleBtn");
-      const icon = document.getElementById("toggleIcon");
-      
-      const isOpen = container.classList.contains("open");
-      
-      if (!isOpen) {
-        container.classList.add("open");
-        icon.classList.remove("rotate-45");
-        btn.classList.replace("bg-blue-600", "bg-red-600");
-        btn.classList.replace("hover:bg-blue-700", "hover:bg-red-700");
-      } else {
-        container.classList.remove("open");
-        icon.classList.add("rotate-45");
-        btn.classList.replace("bg-red-600", "bg-blue-600");
-        btn.classList.replace("hover:bg-red-700", "hover:bg-blue-700");
-      }
-    }
-
-    function switchTab(tab) {
-      document.querySelectorAll(".tab-btn").forEach(btn => {
-        btn.className = "tab-btn flex-1 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 hover:text-gray-700 transition-all cursor-pointer";
-      });
-      document.querySelectorAll(".tab-panel").forEach(panel => panel.classList.remove("active"));
-
-      const activeBtn = document.getElementById(`tab-${tab}`);
-      activeBtn.className = "tab-btn flex-1 py-3 text-xs font-bold uppercase tracking-wider text-blue-600 border-b-2 border-blue-600 bg-white transition-all cursor-pointer";
-
-      document.getElementById(`panel-${tab}`).classList.add("active");
-    }
-
-    function switchView(view) {
-      document.querySelectorAll(".view-btn").forEach(btn => {
-        btn.className = "view-btn px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 hover:text-gray-700 rounded-t-md cursor-pointer whitespace-nowrap";
-      });
-      document.getElementById("viewContainer-recent").classList.add("hidden");
-      document.getElementById("viewContainer-accounts").classList.add("hidden");
-      document.getElementById("viewContainer-credit").classList.add("hidden");
-      document.getElementById("viewContainer-monthly").classList.add("hidden");
-
-      const activeBtn = document.getElementById(`viewBtn-${view}`);
-      activeBtn.className = "view-btn px-4 py-2 text-xs font-bold uppercase tracking-wider text-blue-600 border-b-2 border-blue-600 bg-white rounded-t-md cursor-pointer whitespace-nowrap";
-
-      document.getElementById(`viewContainer-${view}`).classList.remove("hidden");
-
-      if (view === 'monthly') {
-        renderMonthlyOverview();
-      }
-    }
-
-    function saveLedger() {
-      localStorage.setItem("ledger_data", JSON.stringify(ledger));
-      renderViews();
-      syncToSheet();
-    }
-
-    // ---------- Google Sheet sync (via Apps Script Web App JSON API) ----------
-    // Paste your deployed Apps Script Web App URL below (Deploy > Manage deployments > Web app URL).
-    // It must end in /exec. Leave as "" to run in local/offline-only mode.
-    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxP-JGG7FoXor04-tYxttmGAHKdbB9Ll3gwXmSWx7cz0j7aZPMeoghtNYqya0QmiAzZ/exec";
-
-    function hasServerLink() {
-      return typeof APPS_SCRIPT_URL === "string" && APPS_SCRIPT_URL.startsWith("http");
-    }
-
-    function setSyncStatus(state) {
-      const el = document.getElementById("syncStatus");
-      if (!el) return;
-      if (state === "syncing") {
-        el.textContent = "Syncing…";
-        el.className = "text-[10px] font-bold text-gray-400";
-      } else if (state === "synced") {
-        el.textContent = "Synced to Sheet ✓";
-        el.className = "text-[10px] font-bold text-emerald-600";
-        clearTimeout(setSyncStatus._t);
-        setSyncStatus._t = setTimeout(() => { el.textContent = ""; }, 2500);
-      } else if (state === "offline") {
-        el.textContent = "Offline — saved on device";
-        el.className = "text-[10px] font-bold text-amber-600 cursor-pointer";
-        el.onclick = syncToSheet;
-      } else if (state === "error") {
-        el.textContent = "Sync failed — tap to retry";
-        el.className = "text-[10px] font-bold text-red-600 cursor-pointer";
-        el.onclick = syncToSheet;
-      }
-    }
-
-    let pendingSync = false;
-
-    async function syncToSheet() {
-      if (!hasServerLink()) return; // no backend configured — local-only mode
-      if (!navigator.onLine) {
-        pendingSync = true;
-        setSyncStatus("offline");
-        return;
-      }
-      setSyncStatus("syncing");
-      try {
-        const res = await fetch(APPS_SCRIPT_URL, {
-          method: "POST",
-          headers: { "Content-Type": "text/plain;charset=utf-8" }, // avoids a CORS preflight
-          body: JSON.stringify({ action: "syncLedger", ledger })
-        });
-        const data = await res.json();
-        if (!data || data.ok !== true) throw new Error((data && data.error) || "Unknown sync error");
-        pendingSync = false;
-        setSyncStatus("synced");
-      } catch (err) {
-        console.error("Sheet sync failed:", err);
-        setSyncStatus("error");
-      }
-    }
-
-    async function pullLedgerFromSheet() {
-      if (!hasServerLink()) return;
-      setSyncStatus("syncing");
-      try {
-        const res = await fetch(APPS_SCRIPT_URL, {
-          method: "POST",
-          headers: { "Content-Type": "text/plain;charset=utf-8" },
-          body: JSON.stringify({ action: "getLedger" })
-        });
-        const data = await res.json();
-        // The Sheet is the shared source of truth across devices — always adopt
-        // its current contents rather than only doing this once when empty.
-        if (data && Array.isArray(data.ledger)) {
-          ledger = data.ledger;
-          localStorage.setItem("ledger_data", JSON.stringify(ledger));
-          renderViews();
-        }
-        setSyncStatus("synced");
-      } catch (err) {
-        // Offline or unreachable — keep whatever is already on this device
-        // rather than wiping local data.
-        console.error("Sheet pull failed:", err);
-        setSyncStatus("error");
-      }
-    }
-
-    // Retry automatically once the device comes back online.
-    window.addEventListener("online", () => { if (pendingSync) syncToSheet(); });
-    window.addEventListener("offline", () => setSyncStatus("offline"));
-
-    // ---------- PWA install support ----------
-    if ("serviceWorker" in navigator) {
-      window.addEventListener("load", () => {
-        navigator.serviceWorker.register("sw.js").catch((err) => console.error("SW registration failed:", err));
-      });
-    }
-
-    let deferredInstallPrompt = null;
-    window.addEventListener("beforeinstallprompt", (e) => {
-      e.preventDefault();
-      deferredInstallPrompt = e;
-      const btn = document.getElementById("installBtn");
-      if (btn) btn.classList.remove("hidden");
-    });
-
-    function promptInstall() {
-      if (!deferredInstallPrompt) return;
-      deferredInstallPrompt.prompt();
-      deferredInstallPrompt = null;
-      const btn = document.getElementById("installBtn");
-      if (btn) btn.classList.add("hidden");
-    }
-
-    function renderViews() {
-      renderLedger();
-      renderAccountsGrid();
-      renderCreditGrid();
-      renderMonthlyOverview();
-    }
-
-    function renderLedger() {
-      const tbody = document.getElementById("ledgerTable");
-      const searchInput = document.getElementById("ledgerSearch");
-      const query = searchInput ? searchInput.value.toLowerCase().trim() : "";
-
-      const filteredLedger = ledger.filter(item => {
-        if (!query) return true;
-        return (
-          (item.date && item.date.toLowerCase().includes(query)) ||
-          (item.type && item.type.toLowerCase().includes(query)) ||
-          (item.account && item.account.toLowerCase().includes(query)) ||
-          (item.particulars && item.particulars.toLowerCase().includes(query)) ||
-          (item.amount && item.amount.toString().includes(query))
-        );
-      });
-
-      if (filteredLedger.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-gray-400">No matching records found.</td></tr>`;
-        return;
-      }
-      tbody.innerHTML = filteredLedger.map(item => {
-        const isRed = item.amount < 0 || item.isPaymentLog || item.checked;
-        const colorClass = isRed ? 'text-red-600' : 'text-emerald-600';
-
-        return `
-          <tr class="hover:bg-gray-50">
-            <td class="p-3">${item.date}</td>
-            <td class="p-3"><span class="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs font-semibold">${item.type}</span></td>
-            <td class="p-3 font-semibold text-gray-800">${item.account}</td>
-            <td class="p-3">${item.particulars}</td>
-            <td class="p-3 text-right font-mono ${colorClass}">
-              ${formatCurrency(Math.abs(item.amount))}
-            </td>
-            <td class="p-3 text-center space-x-1 whitespace-nowrap">
-              <button onclick="openEditModal('${item.id}')" class="text-gray-400 hover:text-blue-600 font-bold px-1 py-1 transition cursor-pointer" title="Edit transaction">
-                ✎
-              </button>
-              <button onclick="deleteTransaction('${item.id}')" class="text-gray-400 hover:text-red-600 font-bold px-1 py-1 transition cursor-pointer" title="Delete transaction">
-                ✕
-              </button>
-            </td>
-          </tr>
-        `;
-      }).join("");
-    }
-
-    function renderAccountsGrid() {
-      const grid = document.getElementById("accountsGrid");
-      grid.innerHTML = ACCOUNTS.map((acc, index) => {
-        const accTxns = ledger.filter(item => item.account === acc.name);
-        const total = accTxns.reduce((sum, item) => sum + item.amount, 0);
-
-        const isDraggingMe = activeDragType === 'account' && activeDragIndex === index;
-        const isDraggingOther = activeDragType === 'account' && activeDragIndex !== null && activeDragIndex !== index;
-        
-        const shakeClass = isDraggingOther ? 'animate-shake' : '';
-        const dragStyleClass = isDraggingMe ? 'dragging-card' : '';
-
-        const rowsHtml = accTxns.map((t) => {
-          return `
-            <tr class="border-b border-gray-100 hover:bg-gray-50">
-              <td class="p-1 text-gray-500 whitespace-nowrap">${t.date}</td>
-              <td class="p-1 text-gray-700 truncate max-w-[80px]" title="${t.particulars}">${t.particulars}</td>
-              <td class="p-1 text-right font-mono font-medium ${t.amount < 0 ? 'text-red-600' : 'text-emerald-600'}">
-                ${formatCurrency(Math.abs(t.amount))}
-              </td>
-            </tr>
-          `;
-        }).join("");
-
-        return `
-          <div class="h-64 bg-white border border-gray-200 rounded-md shadow-sm flex flex-col overflow-hidden ${shakeClass} ${dragStyleClass}">
+        <!-- Left Column: Add Transaction & Summary Stats -->
+        <div class="md:col-span-1 space-y-6">
             
-            <div draggable="true"
-                 ondragstart="handleDragStart(event, 'account', ${index})"
-                 ondragover="handleDragOver(event)"
-                 ondragenter="handleDragEnter(event, 'account', ${index})"
-                 ondragend="handleDragEnd()"
-                 class="${acc.color} text-white p-1 text-center font-bold truncate tracking-tight cursor-grab active:cursor-grabbing hover:brightness-110 hover:shadow-inner hover:scale-[1.01] transition-all duration-150 select-none" 
-                 title="Drag to reorder card position">
-              ${acc.name}
+            <!-- Summary Card -->
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 space-y-4">
+                <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Overview</h2>
+                <div>
+                    <p class="text-xs text-slate-500">Total Balance</p>
+                    <p id="net-balance" class="text-2xl font-bold text-slate-800">$0.00</p>
+                </div>
+                <div class="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+                    <div>
+                        <p class="text-xs text-emerald-600 font-medium">Income</p>
+                        <p id="total-income" class="text-sm font-semibold text-emerald-600">+$0.00</p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-rose-600 font-medium">Expense</p>
+                        <p id="total-expense" class="text-sm font-semibold text-rose-600">-$0.00</p>
+                    </div>
+                </div>
             </div>
 
-            <div class="p-1 text-center border-b border-gray-200 bg-gray-50">
-              <div class="font-bold font-mono text-xs truncate ${total < 0 ? 'text-red-600' : 'text-gray-800'}">
-                ${formatCurrency(total)}
-              </div>
-              <div class="text-[9px] font-bold text-gray-400 uppercase tracking-tight">CURRENT AVAILABLE</div>
+            <!-- Form Card -->
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100">
+                <h2 class="text-md font-semibold text-slate-700 mb-4">Add Transaction</h2>
+                <form id="transaction-form" class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-600 mb-1">Description</label>
+                        <input type="text" id="description" required placeholder="e.g., Grocery shopping" 
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-600 mb-1">Amount ($)</label>
+                        <input type="number" step="0.01" id="amount" required placeholder="0.00" 
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-600 mb-1">Type</label>
+                        <select id="type" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="income">Income</option>
+                            <option value="expense">Expense</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 rounded-lg text-sm transition shadow-sm">
+                        Add Transaction
+                    </button>
+                </form>
             </div>
+        </div>
 
-            <div class="flex-1 overflow-y-auto">
-              <table class="w-full text-left">
-                <thead class="bg-gray-100 text-[9px] font-bold text-gray-500 uppercase border-b border-gray-200 sticky top-0 bg-gray-100">
-                  <tr>
-                    <th class="p-1">DATE</th>
-                    <th class="p-1">PARTICULARS</th>
-                    <th class="p-1 text-right">AMOUNT</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${rowsHtml || `<tr><td colspan="3" class="p-2 text-center text-gray-400">No records</td></tr>`}
-                </tbody>
-              </table>
+        <!-- Right Column: Transaction History -->
+        <div class="md:col-span-2 bg-white p-5 rounded-xl shadow-sm border border-slate-100 flex flex-col">
+            <h2 class="text-md font-semibold text-slate-700 mb-4">Transaction History</h2>
+            
+            <div class="overflow-y-auto flex-grow max-h-[500px]" id="transaction-list-container">
+                <ul id="transaction-list" class="divide-y divide-slate-100">
+                    <!-- Dynamic Items Go Here -->
+                </ul>
+                <div id="empty-state" class="text-center py-12 text-slate-400 hidden">
+                    <i class="fa-solid fa-receipt text-3xl mb-2"></i>
+                    <p class="text-sm">No transactions recorded yet.</p>
+                </div>
             </div>
-          </div>
-        `;
-      }).join("");
-    }
+        </div>
 
-    function renderCreditGrid() {
-      const grid = document.getElementById("creditGrid");
-      grid.innerHTML = CREDIT_CARDS.map((card, index) => {
-        const cardTxns = ledger.filter(item => item.account === card.name && !item.isPaymentLog);
-        const limit = parseFloat(creditLimits[card.name]) || 0;
+    </main>
+
+    <!-- Footer -->
+    <footer class="text-center py-4 text-xs text-slate-400 border-t border-slate-200 bg-white">
+        Transaction Manager PWA &copy; 2026
+    </footer>
+
+    <!-- App Logic -->
+    <script>
+        let transactions = JSON.parse(localStorage.getItem('transactions')) || [];
+
+        const form = document.getElementById('transaction-form');
+        const descriptionInput = document.getElementById('description');
+        const amountInput = document.getElementById('amount');
+        const typeInput = document.getElementById('type');
+        const transactionList = document.getElementById('transaction-list');
+        const emptyState = document.getElementById('empty-state');
         
-        const span = cardDateSpans[card.name] || { start: "", end: "" };
+        const netBalanceEl = document.getElementById('net-balance');
+        const totalIncomeEl = document.getElementById('total-income');
+        const totalExpenseEl = document.getElementById('total-expense');
 
-        const sortedCardTxns = [...cardTxns].sort((a, b) => {
-          if (!span.start || !span.end) return 0;
-          const aInSpan = a.date >= span.start && a.date <= span.end;
-          const bInSpan = b.date >= span.start && b.date <= span.end;
-          if (aInSpan && !bInSpan) return -1;
-          if (!aInSpan && bInSpan) return 1;
-          return 0;
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const newTransaction = {
+                id: Date.now(),
+                description: descriptionInput.value.trim(),
+                amount: parseFloat(amountInput.value),
+                type: typeInput.value
+            };
+
+            transactions.unshift(newTransaction);
+            saveAndRender();
+            form.reset();
         });
 
-        const unpaidTotal = cardTxns.reduce((sum, item) => {
-          return sum + (item.checked ? 0 : Math.abs(item.amount));
-        }, 0);
+        function deleteTransaction(id) {
+            transactions = transactions.filter(t => t.id !== id);
+            saveAndRender();
+        }
 
-        const available = limit - unpaidTotal;
-
-        let spanSum = 0;
-        let hasActiveSpan = span.start && span.end;
-        if (hasActiveSpan) {
-          spanSum = cardTxns.reduce((sum, item) => {
-            if (item.date >= span.start && item.date <= span.end) {
-              return sum + Math.abs(item.amount);
+        function clearAllTransactions() {
+            if (confirm("Are you sure you want to clear all transaction records?")) {
+                transactions = [];
+                saveAndRender();
             }
-            return sum;
-          }, 0);
         }
 
-        const isDraggingMe = activeDragType === 'credit' && activeDragIndex === index;
-        const isDraggingOther = activeDragType === 'credit' && activeDragIndex !== null && activeDragIndex !== index;
-        
-        const shakeClass = isDraggingOther ? 'animate-shake' : '';
-        const dragStyleClass = isDraggingMe ? 'dragging-card' : '';
+        function saveAndRender() {
+            localStorage.setItem('transactions', JSON.stringify(transactions));
+            render();
+        }
 
-        const rowsHtml = sortedCardTxns.map((t) => {
-          const inSpan = span.start && span.end && t.date >= span.start && t.date <= span.end;
-          const rowHighlight = inSpan ? 'bg-amber-50/80 border-l-2 border-amber-500' : '';
-
-          let computedDueDate = '-';
-          if (t.date) {
-            const pDate = new Date(t.date);
-            let dYear = pDate.getFullYear();
-            let dMonth = pDate.getMonth();
-            const cardDueDay = card.dueDay || 15;
+        function render() {
+            transactionList.innerHTML = '';
             
-            if (pDate.getDate() > cardDueDay) {
-              dMonth++;
-              if (dMonth > 11) {
-                dMonth = 0;
-                dYear++;
-              }
+            let income = 0;
+            let expense = 0;
+
+            if (transactions.length === 0) {
+                emptyState.classList.remove('hidden');
+            } else {
+                emptyState.classList.add('hidden');
+                
+                transactions.forEach(t => {
+                    if (t.type === 'income') {
+                        income += t.amount;
+                    } else {
+                        expense += t.amount;
+                    }
+
+                    const li = document.createElement('li');
+                    li.className = "py-3 flex justify-between items-center group";
+                    
+                    const isIncome = t.type === 'income';
+                    const amountSign = isIncome ? '+' : '-';
+                    const amountColor = isIncome ? 'text-emerald-600' : 'text-slate-700';
+
+                    li.innerHTML = `
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 rounded-full flex items-center justify-center ${isIncome ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}">
+                                <i class="fa-solid ${isIncome ? 'fa-arrow-down' : 'fa-arrow-up'} text-xs"></i>
+                            </div>
+                            <div>
+                                <p class="text-sm font-medium text-slate-800">${escapeHtml(t.description)}</p>
+                                <span class="text-[10px] uppercase font-semibold tracking-wider text-slate-400">${t.type}</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-4">
+                            <span class="text-sm font-semibold ${amountColor}">${amountSign}$${t.amount.toFixed(2)}</span>
+                            <button onclick="deleteTransaction(${t.id})" class="text-slate-300 hover:text-rose-500 transition opacity-0 group-hover:opacity-100">
+                                <i class="fa-solid fa-trash text-xs"></i>
+                            </button>
+                        </div>
+                    `;
+                    transactionList.appendChild(li);
+                });
             }
-            const lastDayOfTargetMonth = new Date(dYear, dMonth + 1, 0).getDate();
-            const actualDay = Math.min(cardDueDay, lastDayOfTargetMonth);
-            computedDueDate = `${dYear}-${String(dMonth + 1).padStart(2, '0')}-${String(actualDay).padStart(2, '0')}`;
-          }
 
-          return `
-            <tr class="border-b border-gray-100 hover:bg-gray-50 ${rowHighlight}">
-              <td class="p-0.5 text-center">
-                <input type="checkbox" ${t.checked ? 'checked' : ''} onchange="toggleCheck('${t.id}')" class="rounded text-blue-600 focus:ring-0 cursor-pointer">
-              </td>
-              <td class="p-1 text-gray-500 whitespace-nowrap">${t.date}</td>
-              <td class="p-1 text-gray-700 truncate max-w-[55px]" title="${t.particulars}">${t.particulars}</td>
-              <td class="p-1 text-right font-mono font-medium ${t.checked ? 'text-emerald-600' : 'text-red-600'}">
-                ${formatCurrency(Math.abs(t.amount))}
-              </td>
-              <td class="p-1 text-gray-500 text-[9px] whitespace-nowrap">${computedDueDate}</td>
-            </tr>
-          `;
-        }).join("");
-
-        const formattedLimitInput = limit > 0 ? formatCurrency(limit) : "";
-
-        return `
-          <div class="h-64 bg-white border border-gray-200 rounded-md shadow-sm flex flex-col overflow-hidden ${shakeClass} ${dragStyleClass}">
-            
-            <div draggable="true"
-                 ondragstart="handleDragStart(event, 'credit', ${index})"
-                 ondragover="handleDragOver(event)"
-                 ondragenter="handleDragEnter(event, 'credit', ${index})"
-                 ondragend="handleDragEnd()"
-                 class="${card.color} text-white p-1 text-center font-bold truncate tracking-tight cursor-grab active:cursor-grabbing hover:brightness-110 hover:shadow-inner hover:scale-[1.01] transition-all duration-150 select-none" 
-                 title="Drag to reorder card position">
-              ${card.name}
-            </div>
-
-            <div class="px-1 py-0.5 border-b border-gray-200 bg-gray-50 flex justify-between items-center text-[9px]">
-              <span class="font-bold text-gray-500 uppercase">LIMIT:</span>
-              <input type="text" 
-                     value="${formattedLimitInput}" 
-                     placeholder="₱0.00" 
-                     onfocus="this.value = creditLimits['${card.name}'] || ''" 
-                     onblur="updateCreditLimit('${card.name}', this.value)" 
-                     onchange="updateCreditLimit('${card.name}', this.value)" 
-                     class="w-20 p-0.5 border border-gray-300 rounded text-right font-mono text-[10px] outline-none">
-            </div>
-
-            <!-- Date Span Search Toolbar -->
-            <div class="px-1 py-1 border-b border-gray-200 bg-amber-50/50 flex flex-col space-y-0.5 text-[9px]">
-              <div class="flex justify-between items-center font-bold text-gray-600 uppercase">
-                <span>Span:</span>
-                ${(span.start || span.end) ? `<button onclick="clearCardSpan('${card.name}')" class="text-red-600 hover:underline cursor-pointer">Clear</button>` : ''}
-              </div>
-              <div class="flex items-center space-x-1">
-                <input type="date" value="${span.start || ''}" onchange="updateCardSpan('${card.name}', 'start', this.value)" class="w-full p-0.5 border border-gray-300 rounded text-[9px] outline-none bg-white font-mono">
-                <span class="text-gray-400">-</span>
-                <input type="date" value="${span.end || ''}" onchange="updateCardSpan('${card.name}', 'end', this.value)" class="w-full p-0.5 border border-gray-300 rounded text-[9px] outline-none bg-white font-mono">
-              </div>
-            </div>
-
-            <!-- Span Sum Display Box -->
-            ${hasActiveSpan ? `
-              <div class="px-1 py-0.5 bg-amber-100/70 border-b border-amber-200 text-center">
-                <span class="font-bold font-mono text-[10px] text-amber-900">${formatCurrency(spanSum)}</span>
-                <span class="text-[8px] font-bold text-amber-700 uppercase tracking-tight ml-1">SPAN</span>
-              </div>
-            ` : ''}
-
-            <div class="px-1 py-0.5 text-center border-b border-gray-200 bg-gray-50">
-              <span class="font-bold font-mono text-xs ${available < 0 ? 'text-red-600' : 'text-emerald-600'}">${formatCurrency(available)}</span>
-              <span class="text-[8px] font-bold text-gray-400 uppercase ml-1">AVAIL</span>
-            </div>
-
-            <div class="flex-1 overflow-y-auto">
-              <table class="w-full text-left">
-                <thead class="bg-gray-100 text-[9px] font-bold text-gray-500 uppercase border-b border-gray-200 sticky top-0 bg-gray-100">
-                  <tr>
-                    <th class="p-0.5 w-3"></th>
-                    <th class="p-1">DATE</th>
-                    <th class="p-1">PARTICULARS</th>
-                    <th class="p-1 text-right">AMOUNT</th>
-                    <th class="p-1">DUE</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${rowsHtml || `<tr><td colspan="5" class="p-2 text-center text-gray-400">No records</td></tr>`}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        `;
-      }).join("");
-    }
-
-    function updateCardSpan(cardName, field, value) {
-      if (!cardDateSpans[cardName]) cardDateSpans[cardName] = { start: "", end: "" };
-      cardDateSpans[cardName][field] = value;
-      localStorage.setItem("card_date_spans", JSON.stringify(cardDateSpans));
-      renderCreditGrid();
-    }
-
-    function clearCardSpan(cardName) {
-      if (cardDateSpans[cardName]) {
-        cardDateSpans[cardName] = { start: "", end: "" };
-        localStorage.setItem("card_date_spans", JSON.stringify(cardDateSpans));
-        renderCreditGrid();
-      }
-    }
-
-    function renderMonthlyOverview() {
-      const monthSel = parseInt(document.getElementById("monthlySelectMonth").value);
-      const yearSel = parseInt(document.getElementById("monthlySelectYear").value);
-      
-      const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-      document.getElementById("monthlyTitle").innerText = monthNames[monthSel];
-
-      const filtered = ledger.filter(item => {
-        if (!item.date) return false;
-        const parts = item.date.split("-");
-        if (parts.length < 3) return false;
-        const y = parseInt(parts[0]);
-        const m = parseInt(parts[1]) - 1;
-        return y === yearSel && m === monthSel;
-      });
-
-      const activeFiltered = filtered.filter(item => item.type !== "Loan");
-
-      const incomeItems = activeFiltered.filter(item => item.amount > 0 && !item.isPaymentLog && item.type !== "Fund Transfer" && item.type !== "Withdraw");
-      const expenseItems = activeFiltered.filter(item => item.amount < 0 || item.isPaymentLog || item.type === "EXPENSE");
-
-      const totalIncome = incomeItems.reduce((sum, item) => sum + Math.abs(item.amount), 0);
-      const totalExpense = expenseItems.reduce((sum, item) => sum + Math.abs(item.amount), 0);
-      const balance = totalIncome - totalExpense;
-
-      document.getElementById("monthlyTotalIncome").innerText = formatCurrency(totalIncome);
-      document.getElementById("monthlyTotalExpense").innerText = formatCurrency(totalExpense);
-      document.getElementById("monthlyTotalBalance").innerText = formatCurrency(balance);
-
-      const incTbody = document.getElementById("monthlyIncomeTableBody");
-      if (incomeItems.length === 0) {
-        incTbody.innerHTML = `<tr><td colspan="2" class="p-4 text-center text-gray-400">No income records</td></tr>`;
-      } else {
-        incTbody.innerHTML = incomeItems.map(i => `
-          <tr class="hover:bg-gray-50">
-            <td class="p-2.5 font-medium text-gray-700">${i.particulars}</td>
-            <td class="p-2.5 text-right font-mono text-emerald-600 font-semibold">${formatCurrency(Math.abs(i.amount))}</td>
-          </tr>
-        `).join("");
-      }
-
-      const expTbody = document.getElementById("monthlyExpenseTableBody");
-      if (expenseItems.length === 0) {
-        expTbody.innerHTML = `<tr><td colspan="2" class="p-4 text-center text-gray-400">No expense records</td></tr>`;
-      } else {
-        expTbody.innerHTML = expenseItems.map(e => `
-          <tr class="hover:bg-gray-50">
-            <td class="p-2.5 font-medium text-gray-700">${e.particulars}</td>
-            <td class="p-2.5 text-right font-mono text-red-600 font-semibold">${formatCurrency(Math.abs(e.amount))}</td>
-          </tr>
-        `).join("");
-      }
-
-      updateDonutAndLegend('income', incomeItems, totalIncome);
-      updateDonutAndLegend('expense', expenseItems, totalExpense);
-
-      const maxVal = Math.max(totalIncome, totalExpense, 1);
-      const incHeight = Math.round((totalIncome / maxVal) * 110);
-      const expHeight = Math.round((totalExpense / maxVal) * 110);
-
-      document.getElementById("barIncome").style.height = incHeight + "px";
-      document.getElementById("barIncomeVal").innerText = formatCurrency(totalIncome);
-      document.getElementById("barExpense").style.height = expHeight + "px";
-      document.getElementById("barExpenseVal").innerText = formatCurrency(totalExpense);
-    }
-
-    function updateDonutAndLegend(type, items, total) {
-      const pathEl = document.getElementById(`${type}DonutPath`);
-      const textEl = document.getElementById(`${type}DonutText`);
-      const legendEl = document.getElementById(`${type}Legend`);
-
-      if (total === 0) {
-        pathEl.setAttribute("stroke-dasharray", "0, 100");
-        textEl.innerText = "0%";
-        legendEl.innerHTML = `<div class="text-center text-gray-400">No data</div>`;
-        return;
-      }
-
-      textEl.innerText = formatCurrency(total);
-      pathEl.setAttribute("stroke-dasharray", "100, 100");
-
-      const grouped = {};
-      items.forEach(i => {
-        const key = i.particulars || 'General';
-        grouped[key] = (grouped[key] || 0) + Math.abs(i.amount);
-      });
-
-      const colors = ['bg-emerald-500', 'bg-blue-500', 'bg-amber-500', 'bg-purple-500', 'bg-pink-500', 'bg-indigo-500'];
-      let legendHtml = '';
-      let idx = 0;
-
-      for (const [key, val] of Object.entries(grouped)) {
-        const pct = Math.round((val / total) * 100);
-        const colorClass = colors[idx % colors.length];
-        legendHtml += `
-          <div class="flex items-center justify-between">
-            <div class="flex items-center space-x-1.5 truncate">
-              <span class="w-2.5 h-2.5 rounded-full ${colorClass} inline-block shrink-0"></span>
-              <span class="truncate text-gray-600" title="${key}">${key}</span>
-            </div>
-            <span class="font-mono font-semibold text-gray-700 shrink-0">${pct}%</span>
-          </div>
-        `;
-        idx++;
-      }
-      legendEl.innerHTML = legendHtml;
-    }
-
-    function toggleCheck(id) {
-      const item = ledger.find(t => String(t.id) === String(id));
-      if (!item) return;
-
-      item.checked = !item.checked;
-
-      if (item.checked) {
-        const currentDate = new Date().toISOString().split("T")[0];
-        const paymentTxn = {
-          id: "pay_" + item.id,
-          linkedLoanId: item.id,
-          isPaymentLog: true,
-          date: currentDate,
-          type: "EXPENSE",
-          account: item.account,
-          particulars: item.particulars,
-          amount: Math.abs(item.amount),
-          checked: true
-        };
-        ledger.unshift(paymentTxn);
-      } else {
-        ledger = ledger.filter(t => t.linkedLoanId !== item.id);
-      }
-
-      saveLedger();
-    }
-
-    function updateCreditLimit(cardName, value) {
-      const cleanVal = String(value).replace(/[^0-9.-]+/g, "");
-      creditLimits[cardName] = parseFloat(cleanVal) || 0;
-      localStorage.setItem("credit_limits", JSON.stringify(creditLimits));
-      renderCreditGrid();
-    }
-
-    function deleteTransaction(id) {
-      const target = ledger.find(t => String(t.id) === String(id));
-      if (!target) return;
-
-      if (!confirm(`Are you sure you want to delete transaction "${target.particulars}" (${formatCurrency(target.amount)})?`)) return;
-
-      if (target.type === "Loan" && target.loanGroupId) {
-        const groupItems = ledger.filter(t => t.loanGroupId === target.loanGroupId);
-        const groupIds = groupItems.map(g => g.id);
-        ledger = ledger.filter(t => t.loanGroupId !== target.loanGroupId && !groupIds.includes(t.linkedLoanId));
-      } else if (target.isPaymentLog && target.linkedLoanId) {
-        const loanItem = ledger.find(t => String(t.id) === String(target.linkedLoanId));
-        if (loanItem) {
-          loanItem.checked = false;
+            const net = income - expense;
+            netBalanceEl.textContent = `$${net.toFixed(2)}`;
+            netBalanceEl.className = `text-2xl font-bold ${net >= 0 ? 'text-slate-800' : 'text-rose-600'}`;
+            totalIncomeEl.textContent = `+$${income.toFixed(2)}`;
+            totalExpenseEl.textContent = `-$${expense.toFixed(2)}`;
         }
-        ledger = ledger.filter(t => String(t.id) !== String(id));
-      } else {
-        ledger = ledger.filter(t => String(t.id) !== String(id) && t.linkedLoanId !== String(id));
-      }
 
-      saveLedger();
-    }
-
-    function toggleEditModal() {
-      document.getElementById("editModal").classList.toggle("hidden");
-    }
-
-    function openEditModal(id) {
-      const item = ledger.find(t => String(t.id) === String(id));
-      if (!item) return;
-
-      document.getElementById("editId").value = item.id;
-      document.getElementById("editDate").value = item.date || today;
-      document.getElementById("editType").value = item.type || "EXPENSE";
-      
-      const allMethods = [...ACCOUNTS.map(a => a.name), ...CREDIT_CARDS.map(c => c.name)];
-      populateDropdown("editAccount", allMethods);
-      document.getElementById("editAccount").value = item.account;
-
-      document.getElementById("editParticulars").value = item.particulars || "";
-      document.getElementById("editAmount").value = Math.abs(item.amount || 0);
-
-      toggleEditModal();
-    }
-
-    function saveEditedTransaction() {
-      const id = document.getElementById("editId").value;
-      const date = document.getElementById("editDate").value;
-      const type = document.getElementById("editType").value;
-      const account = document.getElementById("editAccount").value;
-      const particulars = document.getElementById("editParticulars").value.trim();
-      const rawAmount = parseFloat(document.getElementById("editAmount").value) || 0;
-
-      if (!date || !particulars || rawAmount <= 0) {
-        return alert("Please fill out all fields with valid information.");
-      }
-
-      if (!confirm("Are you sure you want to save changes to this transaction?")) return;
-
-      const item = ledger.find(t => String(t.id) === String(id));
-      if (!item) return;
-
-      let finalAmount = rawAmount;
-      if (type === "EXPENSE" || type === "Fund Transfer" || type === "Withdraw" || type === "Loan" || item.amount < 0) {
-        if (!item.isPaymentLog && type !== "INCOME") {
-          finalAmount = -Math.abs(rawAmount);
+        function escapeHtml(str) {
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
         }
-      }
 
-      item.date = date;
-      item.type = type;
-      item.account = account;
-      item.particulars = particulars;
-      item.amount = finalAmount;
-
-      saveLedger();
-      toggleEditModal();
-    }
-
-    function submitEntry(direction) {
-      const date = document.getElementById("entryDate").value;
-      const account = document.getElementById("entryAccount").value;
-      const amountRaw = parseFloat(document.getElementById("entryAmount").value) || 0;
-      const particulars = document.getElementById("entryParticulars").value || "N/A";
-
-      if (amountRaw <= 0) return alert("Enter a valid amount.");
-
-      if (!confirm(`Are you sure you want to add this ${direction}?`)) return;
-
-      const amount = direction === "expense" ? -Math.abs(amountRaw) : Math.abs(amountRaw);
-      ledger.unshift({ id: Date.now().toString(), date, type: direction.toUpperCase(), account, particulars, amount, checked: false });
-
-      saveLedger();
-      document.getElementById("entryAmount").value = "";
-      document.getElementById("entryParticulars").value = "";
-      toggleForm();
-    }
-
-    function submitTransfer() {
-      const date = document.getElementById("transferDate").value;
-      const fromAcc = document.getElementById("transferFrom").value;
-      const toAcc = document.getElementById("transferTo").value;
-      const amt = parseFloat(document.getElementById("transferAmount").value) || 0;
-
-      if (amt <= 0 || fromAcc === toAcc) return alert("Invalid transfer details.");
-
-      if (!confirm(`Are you sure you want to transfer ${formatCurrency(amt)} from ${fromAcc} to ${toAcc}?`)) return;
-
-      ledger.unshift({ id: Date.now().toString(), date, type: "Fund Transfer", account: fromAcc, particulars: `Transfer to ${toAcc}`, amount: -Math.abs(amt), checked: false });
-      ledger.unshift({ id: (Date.now() + 1).toString(), date, type: "Fund Transfer", account: toAcc, particulars: `Transfer from ${fromAcc}`, amount: Math.abs(amt), checked: false });
-
-      saveLedger();
-      document.getElementById("transferAmount").value = "";
-      toggleForm();
-    }
-
-    function submitWithdraw() {
-      const date = document.getElementById("withdrawDate").value;
-      const fromAcc = document.getElementById("withdrawFrom").value;
-      const amt = parseFloat(document.getElementById("withdrawAmount").value) || 0;
-
-      if (amt <= 0) return alert("Enter a valid amount.");
-
-      if (!confirm(`Are you sure you want to withdraw ${formatCurrency(amt)} from ${fromAcc}?`)) return;
-
-      ledger.unshift({ id: Date.now().toString(), date, type: "Withdraw", account: fromAcc, particulars: "To Cash", amount: -Math.abs(amt), checked: false });
-      ledger.unshift({ id: (Date.now() + 1).toString(), date, type: "Withdraw", account: "CASH", particulars: `From ${fromAcc}`, amount: Math.abs(amt), checked: false });
-
-      saveLedger();
-      document.getElementById("withdrawAmount").value = "";
-      toggleForm();
-    }
-
-    function submitLoan() {
-      const date = document.getElementById("loanDate").value;
-      const card = document.getElementById("loanCard").value;
-      const particulars = document.getElementById("loanParticulars").value.trim();
-      const inputs = document.querySelectorAll(".m-input");
-
-      if (!particulars || inputs.length === 0) return alert("Please fill in all fields.");
-
-      if (!confirm(`Are you sure you want to submit this Loan/BNPL schedule for "${particulars}"?`)) return;
-
-      const baseDate = new Date(date);
-      const loanGroupId = "loan_" + Date.now();
-
-      inputs.forEach((input, index) => {
-        const amt = parseFloat(input.value) || 0;
-        const label = input.getAttribute("data-label");
-        
-        // BNPL logic: first installment starts next month, subsequent ones follow each month after
-        const instDate = new Date(baseDate);
-        instDate.setMonth(instDate.getMonth() + 1 + index);
-
-        ledger.unshift({
-          id: (Date.now() + index).toString(),
-          loanGroupId: loanGroupId,
-          date: instDate.toISOString().split("T")[0],
-          type: "Loan",
-          account: card,
-          particulars: `${particulars} (${label})`,
-          amount: -Math.abs(amt),
-          checked: false
-        });
-      });
-
-      saveLedger();
-      document.getElementById("loanParticulars").value = "";
-      document.getElementById("loanTotal").value = "";
-      generateSchedule();
-      toggleForm();
-    }
-
-    function generateSchedule() {
-      const total = parseFloat(document.getElementById("loanTotal").value) || 0;
-      const months = parseInt(document.getElementById("loanMonths").value) || 0;
-      const box = document.getElementById("scheduleBox");
-
-      if (months <= 0) {
-        box.classList.add("hidden");
-        box.innerHTML = "";
-        return;
-      }
-
-      box.classList.remove("hidden");
-      const baseAmount = (total / months).toFixed(2);
-      
-      let html = "";
-      for (let i = 1; i <= months; i++) {
-        html += `
-          <div class="flex justify-between items-center text-xs">
-            <span class="font-medium text-gray-600">Pay ${i}/${months}:</span>
-            <input type="number" step="0.01" class="m-input w-28 p-1 border border-gray-300 rounded text-right outline-none" data-label="${i}/${months}" value="${baseAmount}">
-          </div>
-        `;
-      }
-      box.innerHTML = html;
-    }
-  </script>
+        // Initial render on load
+        render();
+    </script>
 </body>
 </html>
