@@ -1380,6 +1380,32 @@
     setSyncStatus("offline");
   });
 
+  /*
+     SYNC WHEN RETURNING TO THE APP
+     --------------------------------
+     This complements the 3-second polling. If the app was
+     backgrounded/suspended on a phone, it immediately checks
+     Google Sheets when the user returns.
+  */
+  document.addEventListener("visibilitychange", () => {
+    if (
+      document.visibilityState === "visible" &&
+      navigator.onLine &&
+      !localSyncInProgress
+    ) {
+      pullLedgerFromSheet(true);
+    }
+  });
+
+  window.addEventListener("focus", () => {
+    if (
+      navigator.onLine &&
+      !localSyncInProgress
+    ) {
+      pullLedgerFromSheet(false);
+    }
+  });
+
 
   /* =========================================================
      DRAG / DROP
@@ -3014,102 +3040,87 @@
 
   function toggleCheck(id) {
 
-    const item =
-      ledger.find(
-        t =>
-          String(t.id) ===
-          String(id)
-      );
+    const item = ledger.find(
+      t => String(t.id) === String(id)
+    );
 
     if (!item) return;
 
     /*
-       Toggle the actual Loan installment.
+       Only Loan installments should use this checkbox.
+       Payment-log rows are not displayed in the Credit Card
+       grid, but this guard prevents accidental misuse.
     */
-    item.checked =
-      !Boolean(item.checked);
+    if (item.type !== "Loan" || item.isPaymentLog) {
+      return;
+    }
 
     /*
-       If checked, create exactly one payment log.
-       This payment log is linked to the Loan ID.
+       Toggle the actual Loan installment.
+       This checked value is part of the ledger and is therefore
+       uploaded to Google Sheets and synchronized to other devices.
+    */
+    item.checked = !Boolean(item.checked);
+
+    /*
+       Always remove the old payment record first.
+       This guarantees there can only be ONE payment record
+       for this specific installment.
+    */
+    ledger = ledger.filter(
+      t => String(t.linkedLoanId) !== String(item.id)
+    );
+
+    /*
+       CHECKED = PAID
+       Create one EXPENSE transaction for the installment.
+
+       The amount is negative because this is an actual expense.
+       It is linked to the Loan installment through linkedLoanId.
     */
     if (item.checked) {
 
-      /*
-         Remove any old duplicate payment log first.
-         This prevents duplicate payment logs if the
-         same record is checked repeatedly.
-      */
-      ledger =
-        ledger.filter(
-          t =>
-            String(t.linkedLoanId) !==
-            String(item.id)
-        );
-
       const currentDate =
-        new Date()
-          .toISOString()
-          .split("T")[0];
+        new Date().toISOString().split("T")[0];
 
       const paymentTxn = {
+        id: "pay_" + String(item.id),
 
-        id:
-          "pay_" +
-          String(item.id),
+        linkedLoanId: String(item.id),
 
-        linkedLoanId:
-          String(item.id),
+        isPaymentLog: true,
 
-        isPaymentLog:
-          true,
+        date: currentDate,
 
-        date:
-          currentDate,
+        type: "EXPENSE",
 
-        type:
-          "EXPENSE",
+        account: item.account,
 
-        account:
-          item.account,
+        particulars: item.particulars,
 
-        particulars:
-          item.particulars,
+        amount: -Math.abs(
+          Number(item.amount || 0)
+        ),
 
-        amount:
-          Math.abs(
-            Number(item.amount || 0)
-          ),
-
-        checked:
-          true
+        /*
+           Payment log is always considered completed.
+        */
+        checked: true
       };
 
-      ledger.unshift(
-        paymentTxn
-      );
-
-    } else {
-
-      /*
-         When unchecked, remove its payment log.
-      */
-      ledger =
-        ledger.filter(
-          t =>
-            String(t.linkedLoanId) !==
-            String(item.id)
-        );
+      ledger.unshift(paymentTxn);
     }
 
     /*
        IMPORTANT:
-       saveLedger() now immediately uploads the
-       checked/unchecked state and payment log to
-       Google Sheets.
+       saveLedger() does ALL THREE things:
 
-       Other devices will automatically receive it
-       through the 3-second polling system.
+       1. Saves the checked/unchecked state locally.
+       2. Updates the Loan tab immediately.
+       3. Uploads the complete ledger to Google Sheets.
+
+       Other devices automatically pull the updated ledger
+       through the 3-second synchronization system.
     */
     saveLedger();
   }
