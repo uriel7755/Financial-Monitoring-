@@ -57,7 +57,7 @@
       transition: max-height 0.4s ease-in-out, opacity 0.3s ease-in-out;
     }
     #formContainer.open {
-      max-height: 1000px;
+      max-height: 1200px;
       opacity: 1;
     }
 
@@ -226,7 +226,7 @@
               <input type="number" id="loanMonths" value="3" min="1" max="60" oninput="generateSchedule()" class="w-full p-2.5 border border-gray-300 rounded-md text-sm outline-none">
             </div>
           </div>
-          <div id="scheduleBox" class="max-h-40 overflow-y-auto border border-gray-200 p-3 rounded-md bg-gray-50 space-y-2 hidden"></div>
+          <div id="scheduleBox" class="max-h-56 overflow-y-auto border border-gray-200 p-3 rounded-md bg-gray-50 space-y-2 hidden"></div>
           <button onclick="submitLoan()" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-lg text-sm tracking-wider uppercase transition mt-2 cursor-pointer">
             Submit Loan
           </button>
@@ -889,13 +889,10 @@
                   } else if (t.date) {
                     const pDate = new Date(t.date + "T00:00:00");
                     let dYear = pDate.getFullYear();
-                    let dMonth = pDate.getMonth();
-                    const cardDueDay = card.dueDay || 15;
-                    if (pDate.getDate() > cardDueDay) {
-                      dMonth++;
-                      if (dMonth > 11) { dMonth = 0; dYear++; }
-                    }
+                    let dMonth = pDate.getMonth() + 1; // Default fallback to +1 month from date if missing dueDate
+                    if (dMonth > 11) { dMonth = 0; dYear++; }
                     const lastDayOfTargetMonth = new Date(dYear, dMonth + 1, 0).getDate();
+                    const cardDueDay = card.dueDay || pDate.getDate();
                     const actualDay = Math.min(cardDueDay, lastDayOfTargetMonth);
                     computedDueDate = `${dYear}-${String(dMonth + 1).padStart(2, '0')}-${String(actualDay).padStart(2, '0')}`;
                   }
@@ -1197,17 +1194,10 @@
           } else if (t.date) {
             const pDate = new Date(t.date + "T00:00:00");
             let dYear = pDate.getFullYear();
-            let dMonth = pDate.getMonth();
-            const cardDueDay = card.dueDay || 15;
-            
-            if (pDate.getDate() > cardDueDay) {
-              dMonth++;
-              if (dMonth > 11) {
-                dMonth = 0;
-                dYear++;
-              }
-            }
+            let dMonth = pDate.getMonth() + 1; // Default fallback to +1 month from date if missing dueDate
+            if (dMonth > 11) { dMonth = 0; dYear++; }
             const lastDayOfTargetMonth = new Date(dYear, dMonth + 1, 0).getDate();
+            const cardDueDay = card.dueDay || pDate.getDate();
             const actualDay = Math.min(cardDueDay, lastDayOfTargetMonth);
             computedDueDate = `${dYear}-${String(dMonth + 1).padStart(2, '0')}-${String(actualDay).padStart(2, '0')}`;
           }
@@ -1220,7 +1210,7 @@
               <td class="p-1 text-gray-500 whitespace-nowrap">${t.date}</td>
               <td class="p-1 text-gray-700 truncate max-w-[55px]" title="${t.particulars}">${t.particulars}</td>
               <td class="p-1 text-right font-mono font-medium ${t.checked ? 'text-emerald-600' : 'text-red-600'}">
-                ${formatCurrency(Math.abs(t.amount))}
+                ${formatCurrency(Math.abs(item_amount = t.amount))}
               </td>
               <td class="p-1 text-gray-500 text-[9px] whitespace-nowrap">${computedDueDate}</td>
             </tr>
@@ -1594,7 +1584,6 @@
     }
 
     function submitLoan() {
-      const date = document.getElementById("loanDate").value;
       const card = document.getElementById("loanCard").value;
       const particulars = document.getElementById("loanParticulars").value.trim();
       const rows = document.querySelectorAll(".schedule-row");
@@ -1607,14 +1596,17 @@
 
       rows.forEach((row, index) => {
         const amtInput = row.querySelector(".m-input");
+        const dateInput = row.querySelector(".m-date");
+        const dueDateInput = row.querySelector(".m-duedate");
         const amt = parseFloat(amtInput.value) || 0;
         const label = amtInput.getAttribute("data-label");
-        const installmentDueDate = amtInput.getAttribute("data-duedate");
+        const actualDate = dateInput.value;
+        const installmentDueDate = dueDateInput.value;
 
         ledger.unshift({
           id: (Date.now() + index).toString(),
           loanGroupId: loanGroupId,
-          date: date,
+          date: actualDate,
           dueDate: installmentDueDate,
           type: "Loan",
           account: card,
@@ -1649,20 +1641,34 @@
       
       let html = "";
       for (let i = 1; i <= months; i++) {
-        const nextMonthDate = new Date(baseDate);
-        nextMonthDate.setMonth(nextMonthDate.getMonth() + i);
-        const defaultDueStr = nextMonthDate.toISOString().split("T")[0];
+        // Actual date: +0 months, +1 month, +2 months sequentially from purchase date
+        const actualDateObj = new Date(baseDate);
+        actualDateObj.setMonth(actualDateObj.getMonth() + (i - 1));
+        const defaultActualStr = actualDateObj.toISOString().split("T")[0];
 
-        // Format nice display string for read-only date
-        const displayDateStr = nextMonthDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        // Due date: +1 month, +2 months, +3 months sequentially from purchase date (Due date = posted date + 1 month initially)
+        const dueDateObj = new Date(baseDate);
+        dueDateObj.setMonth(dueDateObj.getMonth() + i);
+        const defaultDueStr = dueDateObj.toISOString().split("T")[0];
 
         html += `
-          <div class="schedule-row flex items-center justify-between space-x-2 text-xs bg-white p-2 rounded border border-gray-200">
-            <span class="font-bold text-gray-600">Pay ${i}/${months}:</span>
-            <span class="font-mono font-semibold text-gray-700 bg-gray-50 px-2 py-1 rounded border border-gray-200">${displayDateStr}</span>
-            <div class="relative flex-1">
-              <span class="absolute left-2 top-1 text-gray-400">₱</span>
-              <input type="number" step="0.01" class="m-input w-full pl-6 p-1 border border-gray-300 rounded text-right outline-none font-mono font-bold" data-label="${i}/${months}" data-duedate="${defaultDueStr}" value="${baseAmount}">
+          <div class="schedule-row bg-white p-2 rounded border border-gray-200 space-y-1.5">
+            <div class="flex items-center justify-between text-xs">
+              <span class="font-bold text-gray-700">Installment ${i}/${months}</span>
+              <div class="relative w-32">
+                <span class="absolute left-2 top-1 text-gray-400">₱</span>
+                <input type="number" step="0.01" class="m-input w-full pl-6 p-1 border border-gray-300 rounded text-right outline-none font-mono font-bold text-xs" data-label="${i}/${months}" value="${baseAmount}">
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-2 text-[10px]">
+              <div>
+                <label class="block font-bold text-gray-400 uppercase mb-0.5">Actual Date</label>
+                <input type="date" class="m-date w-full p-1 border border-gray-300 rounded outline-none font-mono text-xs" value="${defaultActualStr}">
+              </div>
+              <div>
+                <label class="block font-bold text-gray-400 uppercase mb-0.5">Due Date</label>
+                <input type="date" class="m-duedate w-full p-1 border border-gray-300 rounded outline-none font-mono text-xs" value="${defaultDueStr}">
+              </div>
             </div>
           </div>
         `;
