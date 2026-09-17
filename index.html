@@ -206,7 +206,7 @@
         <div id="panel-loan" class="tab-panel space-y-4">
           <div>
             <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Purchase Date</label>
-            <input type="date" id="loanDate" class="w-full p-2.5 border border-gray-300 rounded-md text-sm outline-none">
+            <input type="date" id="loanDate" onchange="generateSchedule()" class="w-full p-2.5 border border-gray-300 rounded-md text-sm outline-none">
           </div>
           <div>
             <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Card / Method</label>
@@ -226,12 +226,32 @@
               <input type="number" id="loanMonths" value="3" min="1" max="60" oninput="generateSchedule()" class="w-full p-2.5 border border-gray-300 rounded-md text-sm outline-none">
             </div>
           </div>
-          <div id="scheduleBox" class="max-h-36 overflow-y-auto border border-gray-200 p-3 rounded-md bg-gray-50 space-y-2 hidden"></div>
+          <div id="scheduleBox" class="max-h-40 overflow-y-auto border border-gray-200 p-3 rounded-md bg-gray-50 space-y-2 hidden"></div>
           <button onclick="submitLoan()" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-lg text-sm tracking-wider uppercase transition mt-2 cursor-pointer">
             Submit Loan
           </button>
         </div>
 
+      </div>
+    </div>
+
+    <!-- ENLARGED ACCOUNT/CARD MODAL -->
+    <div id="enlargeModal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-2 md:p-6 z-50">
+      <div class="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-4xl h-[90vh] flex flex-col overflow-hidden relative">
+        <div id="enlargeHeader" class="px-5 py-4 text-white flex justify-between items-center">
+          <div>
+            <h2 id="enlargeTitle" class="text-lg font-black tracking-wide uppercase">Account Name</h2>
+            <span id="enlargeSubtitle" class="text-xs font-mono font-bold opacity-90">₱0.00</span>
+          </div>
+          <button onclick="toggleEnlargeModal()" class="bg-black/20 hover:bg-black/40 text-white font-bold w-9 h-9 rounded-full flex items-center justify-center text-base transition cursor-pointer">✕</button>
+        </div>
+        <div class="p-4 bg-gray-50 border-b border-gray-200 flex flex-wrap gap-4 items-center justify-between text-xs">
+          <div id="enlargeExtraControls" class="flex items-center space-x-2"></div>
+          <div class="font-bold text-gray-500 uppercase" id="enlargeItemCount">0 transactions</div>
+        </div>
+        <div class="flex-1 overflow-y-auto p-4">
+          <div id="enlargeContent" class="overflow-x-auto"></div>
+        </div>
       </div>
     </div>
 
@@ -763,9 +783,148 @@
       syncToSheet();
     }
 
+    // ---------- Enlarge / Zoom Modal Feature ----------
+    function toggleEnlargeModal() {
+      document.getElementById("enlargeModal").classList.toggle("hidden");
+    }
+
+    function openEnlargedView(name, type) {
+      const modal = document.getElementById("enlargeModal");
+      const header = document.getElementById("enlargeHeader");
+      const titleEl = document.getElementById("enlargeTitle");
+      const subtitleEl = document.getElementById("enlargeSubtitle");
+      const contentEl = document.getElementById("enlargeContent");
+      const countEl = document.getElementById("enlargeItemCount");
+      const extraControls = document.getElementById("enlargeExtraControls");
+
+      let cardColor = "bg-blue-600";
+      if (type === 'account') {
+        const found = ACCOUNTS.find(a => a.name === name);
+        if (found) cardColor = found.color;
+      } else {
+        const found = CREDIT_CARDS.find(c => c.name === name);
+        if (found) cardColor = found.color;
+      }
+
+      header.className = `px-5 py-4 text-white flex justify-between items-center ${cardColor}`;
+      titleEl.innerText = name;
+
+      if (type === 'account') {
+        const accTxns = ledger.filter(item => item.account === name);
+        const total = accTxns.reduce((sum, item) => sum + item.amount, 0);
+        subtitleEl.innerText = `Current Available: ${formatCurrency(total)}`;
+        countEl.innerText = `${accTxns.length} transactions`;
+        extraControls.innerHTML = "";
+
+        contentEl.innerHTML = `
+          <table class="w-full text-left text-xs">
+            <thead class="bg-gray-100 text-gray-500 uppercase border-b border-gray-200">
+              <tr>
+                <th class="p-2.5">Date</th>
+                <th class="p-2.5">Type</th>
+                <th class="p-2.5">Particulars</th>
+                <th class="p-2.5 text-right">Amount</th>
+                <th class="p-2.5 text-center">Actions</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              ${accTxns.length === 0 ? `<tr><td colspan="5" class="p-6 text-center text-gray-400">No records found</td></tr>` :
+                accTxns.map(t => `
+                  <tr class="hover:bg-gray-50">
+                    <td class="p-2.5">${t.date}</td>
+                    <td class="p-2.5"><span class="px-2 py-0.5 bg-gray-100 rounded">${t.type}</span></td>
+                    <td class="p-2.5 font-medium text-gray-800">${t.particulars}</td>
+                    <td class="p-2.5 text-right font-mono font-bold ${t.amount < 0 ? 'text-red-600' : 'text-emerald-600'}">${formatCurrency(Math.abs(t.amount))}</td>
+                    <td class="p-2.5 text-center space-x-2">
+                      <button onclick="openEditModal('${t.id}'); toggleEnlargeModal();" class="text-blue-600 hover:underline font-bold">Edit</button>
+                      <button onclick="deleteTransaction('${t.id}'); openEnlargedView('${name}', 'account');" class="text-red-600 hover:underline font-bold">Delete</button>
+                    </td>
+                  </tr>
+                `).join("")}
+            </tbody>
+          </table>
+        `;
+      } else {
+        const card = CREDIT_CARDS.find(c => c.name === name) || {};
+        const cardTxns = ledger.filter(item => item.account === name && !item.isPaymentLog);
+        const limit = parseFloat(creditLimits[name]) || 0;
+        const unpaidTotal = cardTxns.reduce((sum, item) => sum + (item.checked ? 0 : Math.abs(item.amount)), 0);
+        const available = limit - unpaidTotal;
+        const span = cardDateSpans[name] || { start: "", end: "" };
+
+        subtitleEl.innerText = `Available Limit: ${formatCurrency(available)} (Limit: ${formatCurrency(limit)})`;
+        countEl.innerText = `${cardTxns.length} transactions`;
+
+        extraControls.innerHTML = `
+          <div class="flex items-center space-x-2 bg-white p-2 rounded-lg border border-gray-300 shadow-sm">
+            <span class="font-bold text-gray-600 uppercase">Span Filter:</span>
+            <input type="date" value="${span.start || ''}" onchange="updateCardSpan('${name}', 'start', this.value); openEnlargedView('${name}', 'credit');" class="p-1 border border-gray-300 rounded text-xs outline-none font-mono">
+            <span>to</span>
+            <input type="date" value="${span.end || ''}" onchange="updateCardSpan('${name}', 'end', this.value); openEnlargedView('${name}', 'credit');" class="p-1 border border-gray-300 rounded text-xs outline-none font-mono">
+            ${(span.start || span.end) ? `<button onclick="clearCardSpan('${name}'); openEnlargedView('${name}', 'credit');" class="text-red-600 font-bold hover:underline ml-2">Clear Span</button>` : ''}
+          </div>
+        `;
+
+        contentEl.innerHTML = `
+          <table class="w-full text-left text-xs">
+            <thead class="bg-gray-100 text-gray-500 uppercase border-b border-gray-200">
+              <tr>
+                <th class="p-2.5 text-center w-8">Paid</th>
+                <th class="p-2.5">Date</th>
+                <th class="p-2.5">Particulars</th>
+                <th class="p-2.5 text-right">Amount</th>
+                <th class="p-2.5">Due Date</th>
+                <th class="p-2.5 text-center">Actions</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              ${cardTxns.length === 0 ? `<tr><td colspan="6" class="p-6 text-center text-gray-400">No records found</td></tr>` :
+                cardTxns.map(t => {
+                  const inSpan = span.start && span.end && t.date >= span.start && t.date <= span.end;
+                  const rowHighlight = inSpan ? 'bg-amber-50 border-l-4 border-amber-500' : '';
+
+                  let computedDueDate = '-';
+                  if (t.type === 'Loan' && t.dueDate) {
+                    computedDueDate = t.dueDate;
+                  } else if (t.date) {
+                    const pDate = new Date(t.date + "T00:00:00");
+                    let dYear = pDate.getFullYear();
+                    let dMonth = pDate.getMonth();
+                    const cardDueDay = card.dueDay || 15;
+                    if (pDate.getDate() > cardDueDay) {
+                      dMonth++;
+                      if (dMonth > 11) { dMonth = 0; dYear++; }
+                    }
+                    const lastDayOfTargetMonth = new Date(dYear, dMonth + 1, 0).getDate();
+                    const actualDay = Math.min(cardDueDay, lastDayOfTargetMonth);
+                    computedDueDate = `${dYear}-${String(dMonth + 1).padStart(2, '0')}-${String(actualDay).padStart(2, '0')}`;
+                  }
+
+                  return `
+                    <tr class="hover:bg-gray-50 ${rowHighlight}">
+                      <td class="p-2.5 text-center">
+                        <input type="checkbox" ${t.checked ? 'checked' : ''} onchange="toggleCheck('${t.id}'); openEnlargedView('${name}', 'credit');" class="rounded text-blue-600 cursor-pointer w-4 h-4">
+                      </td>
+                      <td class="p-2.5">${t.date}</td>
+                      <td class="p-2.5 font-medium text-gray-800">${t.particulars}</td>
+                      <td class="p-2.5 text-right font-mono font-bold ${t.checked ? 'text-emerald-600' : 'text-red-600'}">${formatCurrency(Math.abs(t.amount))}</td>
+                      <td class="p-2.5 font-mono text-gray-600">${computedDueDate}</td>
+                      <td class="p-2.5 text-center space-x-2">
+                        <button onclick="openEditModal('${t.id}'); toggleEnlargeModal();" class="text-blue-600 hover:underline font-bold">Edit</button>
+                        <button onclick="deleteTransaction('${t.id}'); openEnlargedView('${name}', 'credit');" class="text-red-600 hover:underline font-bold">Delete</button>
+                      </td>
+                    </tr>
+                  `;
+                }).join("")}
+            </tbody>
+          </table>
+        `;
+      }
+
+      modal.classList.remove("hidden");
+    }
+
     // ---------- Google Sheet sync (via Apps Script Web App JSON API) ----------
-    // Paste your deployed Apps Script Web App URL below (Deploy > Manage deployments > Web app URL).
-    // It must end in /exec. Leave as "" to run in local/offline-only mode.
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwQWJZzO-aJCCn0hQpjiPybE9S247hYT-ZSaaUXCq7GnvdoC7lDlV1jzS4AC8OyXclB/exec";
 
     function hasServerLink() {
@@ -797,7 +956,7 @@
     let pendingSync = false;
 
     async function syncToSheet() {
-      if (!hasServerLink()) return; // no backend configured — local-only mode
+      if (!hasServerLink()) return;
       if (!navigator.onLine) {
         pendingSync = true;
         setSyncStatus("offline");
@@ -807,7 +966,7 @@
       try {
         const res = await fetch(APPS_SCRIPT_URL, {
           method: "POST",
-          headers: { "Content-Type": "text/plain;charset=utf-8" }, // avoids a CORS preflight
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
           body: JSON.stringify({ action: "syncLedger", ledger })
         });
         const data = await res.json();
@@ -830,8 +989,6 @@
           body: JSON.stringify({ action: "getLedger" })
         });
         const data = await res.json();
-        // The Sheet is the shared source of truth across devices — always adopt
-        // its current contents rather than only doing this once when empty.
         if (data && Array.isArray(data.ledger)) {
           ledger = data.ledger;
           localStorage.setItem("ledger_data", JSON.stringify(ledger));
@@ -839,18 +996,14 @@
         }
         setSyncStatus("synced");
       } catch (err) {
-        // Offline or unreachable — keep whatever is already on this device
-        // rather than wiping local data.
         console.error("Sheet pull failed:", err);
         setSyncStatus("error");
       }
     }
 
-    // Retry automatically once the device comes back online.
     window.addEventListener("online", () => { if (pendingSync) syncToSheet(); });
     window.addEventListener("offline", () => setSyncStatus("offline"));
 
-    // ---------- PWA install support ----------
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
         navigator.serviceWorker.register("sw.js").catch((err) => console.error("SW registration failed:", err));
@@ -953,14 +1106,19 @@
         return `
           <div class="h-64 bg-white border border-gray-200 rounded-md shadow-sm flex flex-col overflow-hidden ${shakeClass} ${dragStyleClass}">
             
-            <div draggable="true"
-                 ondragstart="handleDragStart(event, 'account', ${index})"
-                 ondragover="handleDragOver(event)"
-                 ondragenter="handleDragEnter(event, 'account', ${index})"
-                 ondragend="handleDragEnd()"
-                 class="${acc.color} text-white p-1 text-center font-bold truncate tracking-tight cursor-grab active:cursor-grabbing hover:brightness-110 hover:shadow-inner hover:scale-[1.01] transition-all duration-150 select-none" 
-                 title="Drag to reorder card position">
-              ${acc.name}
+            <div class="${acc.color} text-white p-1 px-2 flex justify-between items-center">
+              <div draggable="true"
+                   ondragstart="handleDragStart(event, 'account', ${index})"
+                   ondragover="handleDragOver(event)"
+                   ondragenter="handleDragEnter(event, 'account', ${index})"
+                   ondragend="handleDragEnd()"
+                   class="font-bold truncate tracking-tight cursor-grab active:cursor-grabbing hover:brightness-110 select-none flex-1" 
+                   title="Drag to reorder card position">
+                ${acc.name}
+              </div>
+              <button onclick="openEnlargedView('${acc.name}', 'account')" class="hover:bg-black/20 p-1 rounded transition text-xs cursor-pointer ml-1" title="Enlarge View">
+                🔍
+              </button>
             </div>
 
             <div class="p-1 text-center border-b border-gray-200 bg-gray-50">
@@ -1034,8 +1192,10 @@
           const rowHighlight = inSpan ? 'bg-amber-50/80 border-l-2 border-amber-500' : '';
 
           let computedDueDate = '-';
-          if (t.date) {
-            const pDate = new Date(t.date);
+          if (t.type === 'Loan' && t.dueDate) {
+            computedDueDate = t.dueDate;
+          } else if (t.date) {
+            const pDate = new Date(t.date + "T00:00:00");
             let dYear = pDate.getFullYear();
             let dMonth = pDate.getMonth();
             const cardDueDay = card.dueDay || 15;
@@ -1072,14 +1232,19 @@
         return `
           <div class="h-64 bg-white border border-gray-200 rounded-md shadow-sm flex flex-col overflow-hidden ${shakeClass} ${dragStyleClass}">
             
-            <div draggable="true"
-                 ondragstart="handleDragStart(event, 'credit', ${index})"
-                 ondragover="handleDragOver(event)"
-                 ondragenter="handleDragEnter(event, 'credit', ${index})"
-                 ondragend="handleDragEnd()"
-                 class="${card.color} text-white p-1 text-center font-bold truncate tracking-tight cursor-grab active:cursor-grabbing hover:brightness-110 hover:shadow-inner hover:scale-[1.01] transition-all duration-150 select-none" 
-                 title="Drag to reorder card position">
-              ${card.name}
+            <div class="${card.color} text-white p-1 px-2 flex justify-between items-center">
+              <div draggable="true"
+                   ondragstart="handleDragStart(event, 'credit', ${index})"
+                   ondragover="handleDragOver(event)"
+                   ondragenter="handleDragEnter(event, 'credit', ${index})"
+                   ondragend="handleDragEnd()"
+                   class="font-bold truncate tracking-tight cursor-grab active:cursor-grabbing hover:brightness-110 select-none flex-1" 
+                   title="Drag to reorder card position">
+                ${card.name}
+              </div>
+              <button onclick="openEnlargedView('${card.name}', 'credit')" class="hover:bg-black/20 p-1 rounded transition text-xs cursor-pointer ml-1" title="Enlarge View">
+                🔍
+              </button>
             </div>
 
             <div class="px-1 py-0.5 border-b border-gray-200 bg-gray-50 flex justify-between items-center text-[9px]">
@@ -1093,7 +1258,6 @@
                      class="w-20 p-0.5 border border-gray-300 rounded text-right font-mono text-[10px] outline-none">
             </div>
 
-            <!-- Date Span Search Toolbar -->
             <div class="px-1 py-1 border-b border-gray-200 bg-amber-50/50 flex flex-col space-y-0.5 text-[9px]">
               <div class="flex justify-between items-center font-bold text-gray-600 uppercase">
                 <span>Span:</span>
@@ -1106,7 +1270,6 @@
               </div>
             </div>
 
-            <!-- Span Sum Display Box -->
             ${hasActiveSpan ? `
               <div class="px-1 py-0.5 bg-amber-100/70 border-b border-amber-200 text-center">
                 <span class="font-bold font-mono text-[10px] text-amber-900">${formatCurrency(spanSum)}</span>
@@ -1434,27 +1597,26 @@
       const date = document.getElementById("loanDate").value;
       const card = document.getElementById("loanCard").value;
       const particulars = document.getElementById("loanParticulars").value.trim();
-      const inputs = document.querySelectorAll(".m-input");
+      const rows = document.querySelectorAll(".schedule-row");
 
-      if (!particulars || inputs.length === 0) return alert("Please fill in all fields.");
+      if (!particulars || rows.length === 0) return alert("Please fill in all fields.");
 
       if (!confirm(`Are you sure you want to submit this Loan/BNPL schedule for "${particulars}"?`)) return;
 
-      const baseDate = new Date(date);
       const loanGroupId = "loan_" + Date.now();
 
-      inputs.forEach((input, index) => {
-        const amt = parseFloat(input.value) || 0;
-        const label = input.getAttribute("data-label");
-        
-        // BNPL logic: first installment starts next month, subsequent ones follow each month after
-        const instDate = new Date(baseDate);
-        instDate.setMonth(instDate.getMonth() + 1 + index);
+      rows.forEach((row, index) => {
+        const amtInput = row.querySelector(".m-input");
+        const dateInput = row.querySelector(".m-date");
+        const amt = parseFloat(amtInput.value) || 0;
+        const label = amtInput.getAttribute("data-label");
+        const installmentDueDate = dateInput.value;
 
         ledger.unshift({
           id: (Date.now() + index).toString(),
           loanGroupId: loanGroupId,
-          date: instDate.toISOString().split("T")[0],
+          date: date,
+          dueDate: installmentDueDate,
           type: "Loan",
           account: card,
           particulars: `${particulars} (${label})`,
@@ -1473,6 +1635,7 @@
     function generateSchedule() {
       const total = parseFloat(document.getElementById("loanTotal").value) || 0;
       const months = parseInt(document.getElementById("loanMonths").value) || 0;
+      const purchaseDateStr = document.getElementById("loanDate").value;
       const box = document.getElementById("scheduleBox");
 
       if (months <= 0) {
@@ -1483,13 +1646,22 @@
 
       box.classList.remove("hidden");
       const baseAmount = (total / months).toFixed(2);
+      const baseDate = purchaseDateStr ? new Date(purchaseDateStr + "T00:00:00") : new Date();
       
       let html = "";
       for (let i = 1; i <= months; i++) {
+        const nextMonthDate = new Date(baseDate);
+        nextMonthDate.setMonth(nextMonthDate.getMonth() + i);
+        const defaultDueStr = nextMonthDate.toISOString().split("T")[0];
+
         html += `
-          <div class="flex justify-between items-center text-xs">
-            <span class="font-medium text-gray-600">Pay ${i}/${months}:</span>
-            <input type="number" step="0.01" class="m-input w-28 p-1 border border-gray-300 rounded text-right outline-none" data-label="${i}/${months}" value="${baseAmount}">
+          <div class="schedule-row flex items-center justify-between space-x-2 text-xs bg-white p-2 rounded border border-gray-200">
+            <span class="font-bold text-gray-600 w-12">Pay ${i}/${months}:</span>
+            <input type="date" class="m-date p-1 border border-gray-300 rounded text-xs outline-none font-mono" value="${defaultDueStr}">
+            <div class="relative flex-1">
+              <span class="absolute left-2 top-1 text-gray-400">₱</span>
+              <input type="number" step="0.01" class="m-input w-full pl-6 p-1 border border-gray-300 rounded text-right outline-none font-mono font-bold" data-label="${i}/${months}" value="${baseAmount}">
+            </div>
           </div>
         `;
       }
